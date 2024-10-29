@@ -1,0 +1,550 @@
+---
+title: "data_analysis_for_McManus"
+author: "Jiayi Zhai"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r }
+# Load necessary libraries
+set.seed(123)
+library(ggplot2)
+library(splines)
+library(minpack.lm)
+
+```
+
+## Including Plots
+
+Data Cleaning and Plotting
+
+```{r  }
+# Load and process the dataset
+#df_MC <- read.csv("/Users/desktop/circadian data/data/OneDrive_1_2024-9-17/Data McManus2_WT_P2L_AAVCremCherry.xlsx") 
+df_MC <- as.data.frame(Data_McManus2_WT_P2L_AAVCremCherry)
+
+# Rename columns for clarity
+colnames(df_MC) <- c("Time", "X1", "X2", "X3", "X4")
+
+# Remove outliers where Time is between 100 and 100.1
+df_MC <- df_MC[!(df_MC$Time >= 100 & df_MC$Time <= 100.1), ]
+
+# Plot each species
+ggplot(df_MC, aes(x = Time)) +
+  geom_line(aes(y = X1, color = "X1")) +
+  geom_line(aes(y = X2, color = "X2")) +
+  geom_line(aes(y = X3, color = "X3")) +
+  geom_line(aes(y = X4, color = "X4")) +
+  labs(title = "Data without Outliers", x = "Time", y = "X(t_i)") +
+  scale_color_manual(values = c("X1" = "blue", "X2" = "green", "X3" = "red", "X4" = "purple")) +
+  theme_minimal()
+
+```
+```{r}
+spline_detrend_X1 <- predict(smooth.spline(df_MC$Time, df_MC$X1),    spar =)
+spline_detrend_X2 <- predict(smooth.spline(df_MC$Time, df_MC$X2))
+spline_detrend_X3 <- predict(smooth.spline(df_MC$Time, df_MC$X3))
+spline_detrend_X4 <- predict(smooth.spline(df_MC$Time,df_MC$X4))
+
+# Plot the spline-smoothed data
+plot(df_MC$Time, spline_detrend_X1$y, type = "l", col = "red", lwd = 2, 
+     xlab = "Time", ylab = "Values", main = " Splines", 
+     ylim = range(c(spline_detrend_X1$y, spline_detrend_X2$y, spline_detrend_X3$y, spline_detrend_X4)))
+lines(df_MC$Time, spline_detrend_X2$y, col = "blue", lwd = 2)
+lines(df_MC$Time, spline_detrend_X3$y, col = "green", lwd = 2)
+lines(df_MC$Time, spline_detrend_X4$y, col = "purple", lwd = 2)
+
+legend("topright", legend = c("spline_detrend_X1", "spline_detrend_X2", "spline_detrend_X3", "spline_detrend_X4"), 
+       col = c("red", "blue", "green", "purple"), lwd = 2)
+
+
+# Plot the spline-smoothed data
+spline_detrend_X1 <- predict(smooth.spline(df_MC$Time, df_MC$X1, spar=1))
+plot(df_MC$Time, df_MC$X1, type = "l", col = "yellow", lwd = 2, 
+     xlab = "Time", ylab = "Values", main = " Splines", 
+     ylim = range(c(spline_detrend_X1$y, spline_detrend_X2$y, spline_detrend_X3$y, spline_detrend_X4)))
+lines(df_MC$Time, spline_detrend_X1$y)
+
+plot(df_MC$Time, df_MC$X1-spline_detrend_X1$y, type = "l", col = "yellow", lwd = 2, 
+     xlab = "Time", ylab = "Values", main = " Splines")
+
+
+
+```
+
+Detrending the Data (Exponential Method)
+```{r}
+# Define detrending function using exponential method
+detrend_exponential <- function(time, data_column) {
+  # Fit an exponential model
+  trend_model_exp <- lm(log(data_column) ~ time)
+  
+  # Detrend the data by subtracting the fitted exponential trend
+  detrended_data <- data_column - exp(fitted(trend_model_exp))
+  
+  return(detrended_data)
+}
+
+# Apply detrending to each column
+detrended_X1 <- detrend_exponential(df_MC$Time, df_MC$X1)
+detrended_X2 <- detrend_exponential(df_MC$Time, df_MC$X2)
+detrended_X3 <- detrend_exponential(df_MC$Time, df_MC$X3)
+detrended_X4 <- detrend_exponential(df_MC$Time, df_MC$X4)
+
+# Plot detrended data
+plot(df_MC$Time, detrended_X1, type = "l", col = "blue", xlab = "Time", ylab = "Detrended Values", 
+     main = "Detrended X1, X2, X3, X4 (Exponential)")
+lines(df_MC$Time, detrended_X2, type = "l", col = "green")
+lines(df_MC$Time, detrended_X3, type = "l", col = "red")
+lines(df_MC$Time, detrended_X4, type = "l", col = "purple")
+
+legend("topright", legend = c("X1", "X2", "X3", "X4"), col = c("blue", "green", "red", "purple"), lty = 1, cex = 0.8)
+
+```
+Spline Smooth
+```{r}
+# Spline smoothing for detrended data
+spline_detrend_X1 <- predict(smooth.spline(df_MC$Time, detrended_X1))
+spline_detrend_X2 <- predict(smooth.spline(df_MC$Time, detrended_X2))
+spline_detrend_X3 <- predict(smooth.spline(df_MC$Time, detrended_X3))
+spline_detrend_X4 <- predict(smooth.spline(df_MC$Time, detrended_X4))
+
+# Plot the spline-smoothed data
+plot(df_MC$Time, spline_detrend_X1$y, type = "l", col = "red", lwd = 2, 
+     xlab = "Time", ylab = "Values", main = "Detrended Splines", 
+     ylim = range(c(spline_detrend_X1$y, spline_detrend_X2$y, spline_detrend_X3$y, spline_detrend_X4)))
+lines(df_MC$Time, spline_detrend_X2$y, col = "blue", lwd = 2)
+lines(df_MC$Time, spline_detrend_X3$y, col = "green", lwd = 2)
+lines(df_MC$Time, spline_detrend_X4$y, col = "purple", lwd = 2)
+
+legend("topright", legend = c("spline_detrend_X1", "spline_detrend_X2", "spline_detrend_X3", "spline_detrend_X4"), 
+       col = c("red", "blue", "green", "purple"), lwd = 2)
+
+```
+Nonlinear Least Squares Model Fitting with Weights
+
+```{r}
+# Define the model function
+
+
+model_function <- function(t, A, gamma, omega, phi, y_shift) {
+  A * exp(-gamma * t / 2) * cos(omega * t + phi) + y_shift
+}
+# Function to calculate variance at each time point
+calculate_variance <- function(replicates) {
+  n <- nrow(replicates)
+  mean_vals <- rowMeans(replicates)  # Mean for each time point
+  variance <- rowSums((replicates - mean_vals)^2) / (n - 1)  # Variance formula
+  return(variance)
+}
+# Weighted nonlinear least squares estimation
+weighted_nls <- function(t, replicates, initial_params) {
+  variances <- calculate_variance(replicates)  # Variance at each time point
+  
+  # Fit the model using nlsLM
+  fit <- nlsLM(y ~ model_function(t, A, gamma, omega, phi, y_shift),
+               start = initial_params,
+               data = list(t = t, y = rowMeans(replicates)),
+               weights = 1 / variances)  # Weight by the inverse of variances
+  return(fit)
+}
+
+# Use data from replicates for fitting
+replicates <- df_MC[, c("X1", "X2", "X3", "X4")]
+
+# Calculate variance
+variances <- calculate_variance(replicates)
+hist(variances, main = "Histogram of Variances", 
+     xlab = "Variance", 
+     ylab = "Frequency", 
+     col = "lightblue", 
+     border = "black")
+# Initial parameter estimates
+initial_params <- c(A = 1, gamma = 0.1, omega = 2, phi = 0, y_shift = 0)
+
+# Perform weighted nonlinear least squares fitting
+fit <- weighted_nls(df_MC$Time, replicates, initial_params)
+
+# Print estimated parameters
+estimated_params <- coef(fit)
+print(estimated_params)
+```
+
+
+```{r}
+# Step 1: Define model function and true parameters
+model_function <- function(t, A, gamma, omega, phi, y_shift) {
+    A * exp(-gamma * t) * cos(omega * t + phi) + y_shift
+}
+
+# True parameters
+t <- seq(0, 100, by = 0.1)  # Define time points from 0 to 100
+true_params <- c(A = 1000, gamma = 0.025, omega = 0.9, phi = 0, y_shift = 0)
+
+# Step 2: Generate simulated data with noise
+sigma0 <- 10  # Standard deviation for noise
+set.seed(123)  # Set seed for reproducibility
+y_sim <- model_function(t, true_params["A"], true_params["gamma"], true_params["omega"], true_params["phi"], true_params["y_shift"]) +
+    rnorm(length(t), mean = 0, sd = sigma0)  # Add random noise
+
+# Step 3: Fit the model using nls (nonlinear least squares)
+fit_nls <- nls(
+    y_sim ~ model_function(t, A, gamma, omega, phi, y_shift),
+    start = list(A = 950, gamma = 0.03, omega = 0.85, phi = 0.1, y_shift = 0),
+    data = data.frame(t = t, y_sim = y_sim),
+    algorithm = "port"
+)
+
+# Step 4: Show summary of the fitted model
+summary(fit_nls)
+
+# Step 5: Plot the simulated data and the fitted curve
+plot(t, y_sim, main = "Simulated Data and Fitted Curve", xlab = "Time", ylab = "y_sim", pch = 19, col = "blue")
+lines(t, predict(fit_nls, newdata = data.frame(t = t)), col = "red", lwd = 2)
+legend("topright", legend = c("Simulated Data", "Fitted Curve"), col = c("blue", "red"), pch = c(19, NA), lty = c(NA, 1), lwd = c(NA, 2))
+```
+
+```{r}
+# Step 1: Define model function and true parameters
+model_function <- function(t, A, gamma, omega, phi, y_shift) {
+    A * exp(-gamma * t) * cos(omega * t + phi) + y_shift
+}
+
+# True parameters
+t <- seq(0, 100, by = 0.1)
+true_params <- c(A = 1000, gamma = 0.025, omega = 0.9, phi = 0, y_shift = 0)
+
+# Step 2: Generate simulated data with noise
+sigma0 <- 10
+set.seed(123)
+y_sim <- model_function(t, true_params["A"], true_params["gamma"], true_params["omega"], true_params["phi"], true_params["y_shift"]) +
+    rnorm(length(t), mean = 0, sd = sigma0)
+
+```
+
+
+
+```{r}
+# Task 2: Find peaks
+library(pracma)
+peaks <- findpeaks(y_sim, sortstr = TRUE)
+peak_times <- peaks[, 2]  # Time points of peaks
+print("Peaks found:")
+print(peaks)
+
+```
+
+
+```{r}
+# Step 1: Define model function
+model_function <- function(t, A, gamma, omega, phi, y_shift) {
+  A * exp(-gamma * t) * cos(omega * t + phi) + y_shift
+}
+
+# True parameters
+true_params <- c(A = 1000, gamma = 0.025, omega = 0.9, phi = 0, y_shift = 0)
+
+# Time values from 0 to 100
+t <- seq(0, 100, by = 0.1)
+
+# Step 2: Simulate data with noise
+sigma0 <- 8
+set.seed(123)
+y_sim <- model_function(t, true_params["A"], true_params["gamma"], true_params["omega"], true_params["phi"], true_params["y_shift"]) + 
+  rnorm(length(t), mean = 0, sd = sigma0)
+plot(t,y_sim)
+# Step 3: Identify local maxima
+library(pracma)  # For finding peaks
+peaks <- findpeaks(y_sim, nups = 1, ndowns = 1, threshold = 0)  # Find peaks
+peaks
+# Extract peak times and values
+peak_times <- t[peaks[, 2]]# Index of the maxima (time points) 
+peak_times
+peak_values <- peaks[, 1]  # Values of the maxima
+
+# Print the peaks (time and values)
+cat("Peaks identified:\n")
+#for (i in 1:length(peak_times)) {
+#  cat(sprintf("Peak %d: Time = %d, Value = %.2f\n", i, peak_times[i], peak_values[i]))
+#}
+
+# Step 4: Fit a linear model to log(y_max) = log(A) - gamma * t
+log_y_max <- log(peak_values)
+lm_fit <- lm(log_y_max ~ peak_times)
+
+# Extract initial estimates for A and gamma from the linear fit
+A_initial <- exp(coef(lm_fit)[1])  # log(A) intercept
+gamma_initial <- -coef(lm_fit)[2]  # Slope = -gamma
+
+# Step 5: Estimate omega from time difference between consecutive maxima
+delta_t <- diff(peak_times)[1]  # Difference between first two peaks
+print("Difference between first two peaks:")
+delta_t
+diff(peak_times)
+omega_initial <- 2 * pi / delta_t
+omega_initial
+# Step 6: Set initial values for phi and y_shift (we'll keep them close to 0 for simplicity)
+phi_initial <- 0  # Initial guess for phi
+y_shift_initial <- 0  # Initial guess for y_shift
+
+# Check if these initial estimates are close to the true values
+cat("\nEstimated initial parameters:\n")
+cat("A:", A_initial, "\n")
+cat("gamma:", gamma_initial, "\n")
+cat("omega:", omega_initial, "\n")
+
+# Step 7: Use nls to find the MLEs of the parameters using these initial estimates
+# Use the "port" algorithm to ensure convergence
+initial_guesses <- list(
+  A = A_initial,
+  gamma = gamma_initial,
+  omega = omega_initial,
+  phi = phi_initial,
+  y_shift = y_shift_initial
+)
+print(initial_guesses)
+fit <- nls(
+  y_sim ~ model_function(t, A, gamma, omega, phi, y_shift),
+  start = initial_guesses,
+  algorithm = "port",  # Use the port algorithm to improve convergence
+  control = list(minFactor = 1e-10)  # Adjust minFactor to avoid convergence issues
+)
+# Step 8: Print the MLEs of the parameters
+cat("\nMLEs of the parameters:\n")
+print(summary(fit)$coefficients)
+# Step 9: Plot the simulated data and the identified peaks
+plot(t, y_sim, type = "l", col = "blue", lwd = 2, xlab = "Time", ylab = "Simulated Data", main = "Simulated Data with Identified Peaks")
+points(peak_times, peak_values, col = "red", pch = 19, cex = 1.5)  # Plot peaks
+legend("topright", legend = c("Simulated Data", "Peaks"), col = c("blue", "red"), lty = 1, pch = 19)
+```
+
+Check Initial Guesses Against True Values
+```{r}
+cat("Initial guesses vs True values:\n")
+cat("A (Initial):", A_initial, "vs A (True):", true_params["A"], "\n")
+cat("gamma (Initial):", gamma_initial, "vs gamma (True):", true_params["gamma"], "\n")
+cat("omega (Initial):", omega_initial, "vs omega (True):", true_params["omega"], "\n")
+
+```
+
+```{r}
+cat("\nMLE Results vs True values:\n")
+cat("A (MLE):", coef(fit)["A"], "vs A (True):", true_params["A"], "\n")
+cat("gamma (MLE):", coef(fit)["gamma"], "vs gamma (True):", true_params["gamma"], "\n")
+cat("omega (MLE):", coef(fit)["omega"], "vs omega (True):", true_params["omega"], "\n")
+
+```
+
+
+
+```{r}
+# Load required library
+library(pracma)  # For finding peaks
+
+# Step 1: Define model function
+model_function <- function(t, A, gamma, omega, phi, y_shift) {
+  A * exp(-gamma * t) * cos(omega * t + phi) + y_shift
+}
+
+# True parameters
+true_params <- c(A = 1000, gamma = 0.025, omega = 0.9, phi = 0, y_shift = 0)
+
+# Time values from 0 to 100
+t <- seq(0, 100, by = 0.1)
+
+# Step 2: Define function to compute confidence intervals and coverage
+compute_confidence_intervals <- function(fit, confidence_level = 0.99) {
+  # Extract the coefficient estimates and standard errors
+  coef_estimates <- coef(fit)
+  std_errors <- summary(fit)$coefficients[, "Std. Error"]
+  
+  # Calculate the z-value for the desired confidence level
+  z_value <- qnorm((1 + confidence_level) / 2)
+  
+  # Construct the confidence intervals
+  ci_lower <- coef_estimates - z_value * std_errors
+  ci_upper <- coef_estimates + z_value * std_errors
+  
+  # Return a data frame with parameter names, lower and upper bounds
+  return(data.frame(
+    Parameter = names(coef_estimates),
+    Lower = ci_lower,
+    Upper = ci_upper
+  ))
+}
+
+# Step 3: Run 100 simulations and calculate coverage
+set.seed(123)  # For reproducibility
+n_simulations <- 100
+coverage_counts <- rep(0, length(true_params))  # To store how often true values are within CIs
+
+for (i in 1:n_simulations) {
+  
+  # Step 3.1: Simulate data with noise
+  sigma0 <- 8
+  y_sim <- model_function(t, true_params["A"], true_params["gamma"], true_params["omega"], true_params["phi"], true_params["y_shift"]) + 
+    rnorm(length(t), mean = 0, sd = sigma0)
+  
+  # Step 3.2: Identify local maxima for initial guesses (similar to previous code)
+  peaks <- findpeaks(y_sim, nups = 1, ndowns = 1, threshold = 0)
+  peak_times <- t[peaks[, 2]]
+  peak_values <- peaks[, 1]
+  
+  # Linear fit to get A and gamma
+  log_y_max <- log(peak_values)
+  lm_fit <- lm(log_y_max ~ peak_times)
+  A_initial <- exp(coef(lm_fit)[1])
+  gamma_initial <- -coef(lm_fit)[2]
+  
+  # Omega from time difference between first two peaks
+  delta_t <- diff(peak_times)[1]
+  omega_initial <- 2 * pi / delta_t
+  
+  # Set initial values for phi and y_shift
+  phi_initial <- 0
+  y_shift_initial <- 0
+  
+  # Initial guesses
+  initial_guesses <- list(
+    A = A_initial,
+    gamma = gamma_initial,
+    omega = omega_initial,
+    phi = phi_initial,
+    y_shift = y_shift_initial
+  )
+  
+  # Step 3.3: Fit the model using nls with the "port" algorithm
+  fit <- tryCatch({
+    nls(
+      y_sim ~ model_function(t, A, gamma, omega, phi, y_shift),
+      start = initial_guesses,
+      algorithm = "port",
+      control = list(minFactor = 1e-10)
+    )
+  }, error = function(e) {
+    # Skip this iteration if there is a convergence failure
+    return(NULL)
+  })
+  
+  # If the model fit failed, skip this iteration
+  if (is.null(fit)) {
+    next
+  }
+  
+  # Step 3.4: Compute confidence intervals
+  ci <- compute_confidence_intervals(fit, confidence_level = 0.99)
+  
+  # Step 3.5: Check if true values are inside the confidence intervals
+  for (j in 1:length(true_params)) {
+    if (true_params[j] >= ci$Lower[j] && true_params[j] <= ci$Upper[j]) {
+      coverage_counts[j] <- coverage_counts[j] + 1
+    }
+  }
+}
+
+# Step 4: Calculate the coverage proportions
+coverage_proportions <- coverage_counts / n_simulations
+
+# Step 5: Print the coverage results
+cat("Coverage proportions for each parameter:\n")
+param_names <- names(true_params)
+for (j in 1:length(param_names)) {
+  cat(param_names[j], ": ", coverage_proportions[j], "\n")
+}
+
+```
+Since i'm constructing **99% confidence intervals**, ideally, i would expect the true parameter values to fall within the confidence intervals **99 times out of 100 simulations**, which would correspond to a **coverage proportion close to 0.99**.
+
+However, in my results, the coverage proportions are around **0.90-0.91** for all parameters. This suggests that the confidence intervals are capturing the true parameter values **90-91% of the time**, which is **less than expected** for a 99% confidence interval.
+
+### Why is the Coverage Less than 99%?
+
+- The fact that the coverage is around 90-91% instead of 99% indicates that your confidence intervals might be **too narrow** (underestimating the uncertainty in the parameter estimates), or there could be other factors such as:
+  - **Noise in the data**: The added random noise might make it harder for the model to correctly estimate the parameters in each simulation.
+  - **Convergence issues**: Some of the fits may have failed or converged to suboptimal solutions, leading to incorrect parameter estimates and confidence intervals.
+  - **Initial guesses**: If the initial guesses are far from the true values, the optimization might not always land on the global minimum, resulting in suboptimal confidence intervals.
+
+
+
+Compute 99% marginal confidence intervals for the parameters
+```{r}
+# Compute 99% marginal confidence intervals for the parameters
+compute_confidence_intervals <- function(fit, confidence_level = 0.99) {
+  # Extract the coefficient estimates and standard errors
+  coef_estimates <- coef(fit)
+  std_errors <- summary(fit)$coefficients[, "Std. Error"]
+  
+  # Calculate the z-value for the desired confidence level (99% in this case)
+  z_value <- qnorm((1 + confidence_level) / 2)
+  
+  # Construct the confidence intervals
+  ci_lower <- coef_estimates - z_value * std_errors
+  ci_upper <- coef_estimates + z_value * std_errors
+  
+  # Return a data frame with parameter names, lower and upper bounds
+  return(data.frame(
+    Parameter = names(coef_estimates),
+    Lower = ci_lower,
+    Upper = ci_upper
+  ))
+}
+
+# Assuming the nls model is stored in the object "fit"
+ci_99 <- compute_confidence_intervals(fit, confidence_level = 0.99)
+
+# Print the 99% confidence intervals
+print(ci_99)
+
+```
+
+
+
+
+```{r}
+
+```
+
+
+
+
+
+
+```{r}
+
+```
+
+
+
+
+
+
+```{r}
+
+```
+
+
+
+
+```{r}
+
+```
+
+
+
+
+```{r}
+
+```
+
+
+
+
+
+
+

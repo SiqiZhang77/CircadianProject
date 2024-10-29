@@ -1,0 +1,782 @@
+---
+title: "data_analysis_for_McManus"
+author: "Siqi"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r }
+# Load necessary libraries
+set.seed(123)
+library(ggplot2)
+library(splines)
+library(minpack.lm)
+#install.packages("pracma") 
+library(pracma)
+#install.packages("nls2")
+library(nls2)
+
+
+```
+
+## Including Plots
+
+Data Cleaning and Plotting
+
+```{r  }
+# Load and process the  
+library(readxl)
+Data_McManus2_WT_P2L_AAVCremCherry <- read_excel("/Users/angelzhang/Downloads/CircadianProject/Data_McManus2_WT_P2L_AAVCremCherry.xlsx")
+
+
+df_MC <- as.data.frame(Data_McManus2_WT_P2L_AAVCremCherry)
+
+# Rename columns for clarity
+colnames(df_MC) <- c("Time", "X1", "X2", "X3", "X4")
+
+# Remove outliers where Time is between 100 and 100.1
+df_MC <- df_MC[!(df_MC$Time >= 100 & df_MC$Time <= 100.1), ]
+
+# Plot each species
+ggplot(df_MC, aes(x = Time)) +
+  geom_line(aes(y = X1, color = "X1")) +
+  geom_line(aes(y = X2, color = "X2")) +
+  geom_line(aes(y = X3, color = "X3")) +
+  geom_line(aes(y = X4, color = "X4")) +
+  labs(title = "Data without Outliers", x = "Time", y = "X(t_i)") +
+  scale_color_manual(values = c("X1" = "blue", "X2" = "green", "X3" = "red", "X4" = "purple")) +
+  theme_minimal()
+
+```
+
+```{r}
+
+spline_X1 <- predict(smooth.spline(df_MC$Time, df_MC$X1),    spar =)
+spline_X2 <- predict(smooth.spline(df_MC$Time, df_MC$X2))
+spline_X3 <- predict(smooth.spline(df_MC$Time, df_MC$X3))
+spline_X4 <- predict(smooth.spline(df_MC$Time,df_MC$X4))
+
+# Plot the spline-smoothed data
+plot(df_MC$Time, spline_X1$y, type = "l", col = "red", lwd = 2, 
+     xlab = "Time", ylab = "Values", main = " Splines", 
+     ylim = range(c(spline_X1$y, spline_X2$y, spline_X3$y, spline_X4)))
+lines(df_MC$Time, spline_X2$y, col = "blue", lwd = 2)
+lines(df_MC$Time, spline_X3$y, col = "green", lwd = 2)
+lines(df_MC$Time, spline_X4$y, col = "purple", lwd = 2)
+
+legend("topright", legend = c("spline_X1", "spline_X2", "spline_X3", "spline_X4"), 
+       col = c("red", "blue", "green", "purple"), lwd = 2)
+
+
+# Plot the spline-smoothed data
+spline_X1 <- predict(smooth.spline(df_MC$Time, df_MC$X1, spar=1)) #black line in 2nd #plot（average for X1）
+
+plot(df_MC$Time, df_MC$X1, type = "l", col = "yellow", lwd = 2, 
+     xlab = "Time", ylab = "Values", main = " Splines", 
+     ylim = range(c(spline_X1$y, spline_X2$y, spline_X3$y, spline_X4)))
+lines(df_MC$Time, spline_X1$y)
+
+plot(df_MC$Time, df_MC$X1-spline_X1$y, type = "l", col = "yellow", lwd = 2, 
+     xlab = "Time", ylab = "Values", main = " Detrended Splines")
+
+
+
+```
+```{r}
+x <- 1:length(df_MC$Time)  
+y <- df_MC$X1-spline_X1$y    
+
+maxima <- findpeaks(df_MC$X1-spline_X1$y, minpeakheight=0)  
+minima <- findpeaks(-df_MC$X1-spline_X1$y, minpeakheight=0) 
+
+x_max <- maxima[,2]  
+y_max <- maxima[,1]  
+
+
+fit <- nls(y_max ~ a * exp(-b * x_max) + c, start = list(a = max(y_max), b = 0.01, c = min(y_max)))
+
+summary(fit)
+
+a <- coef(fit)["a"]
+b <- coef(fit)["b"]
+c <- coef(fit)["c"]
+
+plot(x, y, type="l", col="yellow", main="Detrended Splines with Exponential Fit")
+lines(x_max, predict(fit, list(x_max = x_max)), col="red", lwd=2)  #
+
+```
+
+
+
+Simulate Data Based on the Fitted Model
+
+```{r}
+```
+
+
+```{r}
+t <- seq(0, 100, by = 0.1)
+
+model_function <- function(t, A, gamma, omega, phi, y_shift) {
+  A * exp(-gamma * t ) * cos(omega * t + phi) + y_shift
+}
+
+# using estimated parameters to def simulating function
+simulate_data <- function(t, params, sigma) {
+  predicted <- model_function(t, params[1], params[2], params[3], params[4], params[5])
+  noise <- rnorm(length(t), mean = 0, sd = sigma)  #using sigma0 to produce noise 
+  simulated_data <- predicted + noise
+  return(simulated_data)
+}
+sigma0 = 10
+param0=c(1000, 0.025, 0.9, 0,0)
+simulated_data <- simulate_data(t, param0, sigma0 )
+```
+
+
+```{r}
+plot(t, simulated_data, type = "l", col = "blue", main = "Simulated Data", xlab = "Time", ylab = "Simulated Values")
+```
+
+
+
+
+
+##Task1
+##generate simulating data 1 time
+
+```{r}
+
+
+true_params <- c(A = 1000, gamma = 0.025, omega = 0.9, phi = 0, y_shift = 0)
+
+sigma0 <- 10
+t <- seq(0, 100, by = 0.1)
+set.seed(123)
+y_sim <- model_function(t, true_params[1], true_params[2], true_params[3], true_params[4], true_params[5]) + 
+         rnorm(length(t), mean = 0, sd = sigma0)
+
+# default algorithm in nls: Gauss-Newton
+fit_nls <- nls(
+  y_sim ~ model_function(t, A, gamma, omega, phi, y_shift),
+  start = list(A = 950, gamma = 0.03, omega = 0.85, phi = 0.1, y_shift = 0), #initial value close to true ones
+  data = data.frame(t = t, y_sim = y_sim)
+)
+# 
+summary(fit_nls)
+coef(fit_nls)
+```
+
+##Task 2 find peaks
+```{r}
+t <- seq(0, 100, by = 0.1)
+# find peaks
+peaks <- findpeaks(y_sim, minpeakheight = 100, minpeakdistance = 15) 
+
+# peaks[, 2] :index of peaks in (1~1000)
+#t[ peaks[, 2]]: index of peaks in(1~100)
+t_peaks <- t[peaks[, 2]] 
+
+y_peaks <- peaks[, 1]
+
+#
+plot(t, y_sim, type = "l", col = "blue", main = "Simulated Data with Peaks", xlab = "Time", ylab = "Simulated Values")
+points(t_peaks, y_peaks, col = "red", pch = 19)
+```
+##Finding initial parameters:A and gamma
+```{r}
+# transform into log
+log_y_peaks <- log(y_peaks)
+
+# logy = -gamma*t + logA
+fit_linear <- lm(log_y_peaks ~ t_peaks) 
+
+summary(fit_linear)
+print("coef:")
+coef(fit_linear)
+coef(fit_linear)[1]
+print("coef:")
+
+# get log(A)  and  gamma
+log_A <- coef(fit_linear)[1]
+
+init_gamma <- -coef(fit_linear)[2] #Extract gamma from the linear fit
+
+cat("log(A) =", log_A, "\n")
+cat("gamma =", init_gamma, "\n")
+init_A=exp(log_A)
+print(init_A)
+```
+
+## to see whether the initial params A and gamma is fitted or not
+```{r}
+#Plot the simulated data
+plot(t, y_sim, type = "l", col = "blue", main = "Simulated Data with Fitted Exponential", xlab = "Time", ylab = "Simulated Values")
+
+# Calculate the fitted exponential curve using estimated A and gamma from the linear model
+init_A <- exp(log_A)  # Extract log_A from the linear model
+
+# Add the fitted exponential curve
+curve(init_A * exp(-init_gamma * x), from = 0, to = max(t), col = "green", add = TRUE, lwd = 2)
+#  Add a legend 
+legend("topright", legend = c("Simulated Data", "Fitted Exponential"), col = c("blue", "green"), lty = 1)
+
+```
+
+##find initial value：omega
+```{r}
+# Extract the time points of the first two consecutive maxima from t_peaks
+t_max1 <- t_peaks[1]  # First maximum
+t_max2 <- t_peaks[2]  # Second maximum
+t_max3 <- t_peaks[3] 
+t_max4 <- t_peaks[4] 
+# Calculate the time difference between two consecutive maxima
+Delta <- t_max2 - t_max1
+Delta 
+print(t_max3-t_max2)
+print(t_max4 - t_max3)
+# Estimate omega (tau) using the formula 2*pi/Delta
+init_omega <- 2 * pi / Delta
+
+# Output the result
+cat("initial omega (tau) =", init_omega, "\n")
+cat("Time difference between consecutive maxima (Delta) =", Delta, "\n")
+
+```
+we assume period delta keeps same. now our initial parameters are[A = 968.7701,gamma = 0.02295209 ,omega = 0.9377889 , phi = 0, y_shift = 0]
+
+```{r}
+library(nlme)
+  
+fit_nls <- nls(
+  y_sim ~ model_function(t, A, gamma, omega, phi, y_shift),
+  start = list(A = init_A, gamma = init_gamma, omega = init_omega, phi = 0.1, y_shift = 0),
+  data = data.frame(t = t, y_sim = y_sim)
+)
+fit_nls
+
+```
+
+
+###Tasks 3
+```{r}
+
+#library(stats)   
+
+simulate_and_estimate <- function(true_params, sigma0 = 10) {
+  
+  #simulate data
+  t <- seq(0, 100, by = 0.1)
+  
+  
+  model_function <- function(t, A, gamma, omega, phi, y_shift) {
+    A * exp(-gamma * t) * cos(omega * t + phi) + y_shift
+  }
+  
+  
+  y_sim <- model_function(t, true_params[1], true_params[2], true_params[3], true_params[4], true_params[5]) + 
+    rnorm(length(t), mean = 0, sd = sigma0)
+  
+  # find initial value
+  peaks <- findpeaks(y_sim, minpeakheight = 100, minpeakdistance = 15)
+  t_peaks <- t[peaks[, 2]]
+  y_peaks <- peaks[, 1]
+  
+  log_y_peaks <- log(y_peaks)
+  fit_linear <- lm(log_y_peaks ~ t_peaks)
+  log_A <- coef(fit_linear)[1]
+  init_gamma <- -coef(fit_linear)[2]
+  init_A <- exp(log_A)
+  
+  
+  Delta <- t_peaks[2] - t_peaks[1]
+  init_omega <- 2 * pi / Delta
+  
+    # find estimated parameters
+  fit_nls <- try(nls(
+    y_sim ~ model_function(t, A, gamma, omega, phi, y_shift),
+    start = list(A = init_A, gamma = init_gamma, omega = init_omega, phi = 0.1, y_shift = 0),
+    data = data.frame(t = t, y_sim = y_sim)
+  ), silent = TRUE)
+  
+  # check if fitted successful
+  if (class(fit_nls) == "try-error") {
+    return(NULL)  
+  }
+  # find estmate parameters and standard errors
+  param_estimates <- coef(fit_nls)
+  cov_matrix <- vcov(fit_nls)
+  
+  standard_errors <- sqrt(diag(cov_matrix))
+  z_value <- qnorm(0.995)
+  conf_intervals <- cbind(
+    param_estimates - z_value * standard_errors,
+    param_estimates + z_value * standard_errors
+  )
+  return(list(estimates = param_estimates, conf_intervals = conf_intervals))
+}
+# test function
+true_params <- c(A = 1000, gamma = 0.025, omega = 0.9, phi = 0, y_shift = 0)
+result <- simulate_and_estimate(true_params)
+
+result
+
+
+```
+##Task 3: repeat simulations
+```{r}
+# simulat
+n_simulations <- 100
+
+# 
+results <- vector("list", n_simulations)
+# 
+for (i in 1:n_simulations) {
+  results[[i]] <- simulate_and_estimate(true_params)
+}
+results <- Filter(Negate(is.null), results)
+null_count <- sum(sapply(results, is.null))
+cat("Number of unsuccessful fits (NULL results):", null_count, "\n")
+# Initialize coverage counters, one counter for each parameter
+coverage_counts <- rep(0, length(true_params))
+
+# Iterate through each simulation result to check coverage.
+for (i in 1:length(results)) {
+  ci <- results[[i]]$conf_intervals
+  for (j in 1:length(true_params)) {
+    # Check if it falls within the confidence interval.
+    if (true_params[j] >= ci[j, 1] && true_params[j] <= ci[j, 2]) {
+      coverage_counts[j] <- coverage_counts[j] + 1
+    }
+  }
+}
+#calculate coverage
+coverage_proportions <- coverage_counts / n_simulations
+# print unsuccessful fits
+
+
+cat("Coverage for A:", coverage_proportions[1], "\n")
+cat("Coverage for gamma:", coverage_proportions[2], "\n")
+cat("Coverage for omega:", coverage_proportions[3], "\n")
+cat("Coverage for phi:", coverage_proportions[4], "\n")
+cat("Coverage for y_shift:", coverage_proportions[5], "\n")
+
+```
+`
+
+
+```{r}
+library(tidyverse) 
+library(dplyr)
+library(tidyr)
+
+# Extract valid results (remove NULL values);
+valid_results <- Filter(Negate(is.null), results)
+
+# Extract parameter estimates into a data frame
+estimate_data <- do.call(rbind, lapply(valid_results, function(res) {
+  as.data.frame(t(res$estimates))
+}))
+
+
+colnames(estimate_data) <- c("A", "gamma", "omega", "phi", "y_shift")
+
+estimate_long <- estimate_data %>%
+  pivot_longer(cols = everything(), names_to = "Parameter", values_to = "Estimate")
+
+#install.packages("gridExtra")
+library(gridExtra) # arange multiple plots
+
+# Create separate boxplots for each parameter with suitable y-axis ranges;
+plot_A <- ggplot(estimate_long %>% filter(Parameter == "A"), 
+                 aes(x = Parameter, y = Estimate)) +
+  geom_boxplot(fill = "skyblue", color = "darkblue") +
+  labs(title = "A", y = "Estimate") +
+  theme_minimal() +
+  ylim(995, 1006)
+
+plot_gamma <- ggplot(estimate_long %>% filter(Parameter == "gamma"), 
+                     aes(x = Parameter, y = Estimate)) +
+  geom_boxplot(fill = "lightgreen", color = "darkgreen") +
+  labs(title = "gamma", y = "Estimate") +
+  theme_minimal() +
+  ylim(0.02475, 0.02525)
+
+plot_omega <- ggplot(estimate_long %>% filter(Parameter == "omega"), 
+                     aes(x = Parameter, y = Estimate)) +
+  geom_boxplot(fill = "lightblue", color = "blue") +
+  labs(title = "omega", y = "Estimate") +
+  theme_minimal() +
+  ylim(0.8995, 0.9005)
+
+plot_phi <- ggplot(estimate_long %>% filter(Parameter == "phi"), 
+                   aes(x = Parameter, y = Estimate)) +
+  geom_boxplot(fill = "pink", color = "red") +
+  labs(title = "phi", y = "Estimate") +
+  theme_minimal() +
+  ylim(min(estimate_data$phi) * 0.9, max(estimate_data$phi) * 1.1)
+
+plot_y_shift <- ggplot(estimate_long %>% filter(Parameter == "y_shift"), 
+                       aes(x = Parameter, y = Estimate)) +
+  geom_boxplot(fill = "yellow", color = "orange") +
+  labs(title = "y_shift", y = "Estimate") +
+  theme_minimal() +
+  ylim(min(estimate_data$y_shift) * 0.9, max(estimate_data$y_shift) * 1.1)
+
+# Arrange all subplots into a single large plot.
+grid.arrange(plot_A, plot_gamma, plot_omega, plot_phi, plot_y_shift, ncol = 3)
+```
+This plot indicates that most of the estimated parameters obtained from 100 simulations are close to the true parameters.
+
+##Task 4 
+
+finding initial parameters on asymmetric osillator model(on initial meeting file)
+```{r}
+time <- df_MC$Time
+X1 <- df_MC$X1
+# FInd X1 valleys and peaks
+peaks <- findpeaks(X1, minpeakheight = 600, minpeakdistance = 20)
+peaks<-peaks[-6, ]
+t_peaks <- time[peaks[, 2]]
+y_peaks<- peaks[, 1]
+#delete outlier
+
+valleys <- findpeaks(-X1, minpeakheight = -500, minpeakdistance = 50)
+
+t_valleys <- time[valleys[, 2]]
+y_valleys <- -valleys[, 1]  # restore 
+
+# 
+df_peaks <- data.frame(Time = t_peaks, Value = y_peaks)
+df_valleys <- data.frame(Time = t_valleys, Value = y_valleys)
+
+
+ggplot(df_MC, aes(x = Time, y = X1)) +
+  geom_line(color = "blue") +
+  geom_point(data = df_peaks, aes(x = Time, y = Value), color = "red", size = 2, shape = 17) +  
+  geom_point(data = df_valleys, aes(x = Time, y = Value), color = "green", size = 2, shape = 18) + 
+  labs(title = "X1 Data with Peaks and Valleys",
+       x = "Time",
+       y = "X1(t)") +
+  theme_minimal()
+
+```
+
+
+
+```{r}
+log_y_peaks <- log(y_peaks)
+log_y_valleys <- log(y_valleys)
+
+fit_peaks <- lm(log_y_peaks ~ t_peaks)
+fit_valleys <- lm(log_y_valleys ~ t_valleys)
+
+eta_max <- coef(fit_peaks)[2]  # η_max
+eta_min <- coef(fit_valleys)[2]  # η_min
+
+# estimate A_max and A_min
+A_max <- exp(coef(fit_peaks)[1])
+A_min <- exp(coef(fit_valleys)[1])
+
+
+Delta <- t_peaks[2] - t_peaks[1]
+tau <- 2 * pi / Delta
+
+#assume phi = 0
+phi <- 0
+
+# print
+cat("Initial A_max:", A_max, "\n")
+cat("Initial A_min:", A_min, "\n")
+cat("Initial eta_max:", eta_max, "\n")-
+cat("Initial eta_min:", eta_min, "\n")
+cat("Initial tau:", tau, "\n")
+cat("Initial phi:", phi, "\n")
+
+```
+##plot fitted curve to compare
+```{r}
+
+max_exp_curve <- A_max * exp(eta_max * time)
+min_exp_curve <- A_min * exp(eta_min * time)
+# 
+df_peaks <- data.frame(Time = t_peaks, Value = y_peaks)
+df_valleys <- data.frame(Time = t_valleys, Value = y_valleys)
+df_max_exp_curve <- data.frame(Time = time, ExponentialCurve = max_exp_curve)
+df_min_exp_curve <- data.frame(Time = time, ExponentialCurve = min_exp_curve)
+# 
+ggplot(df_MC, aes(x = Time, y = X1)) +
+  geom_line(color = "blue", size = 1) +  # 
+  geom_line(data = df_max_exp_curve, aes(x = Time, y = ExponentialCurve), color = "purple", size = 1, linetype = "dashed") +  # expontential curve
+  geom_line(data = df_min_exp_curve, aes(x = Time, y = ExponentialCurve), color = "yellow", size = 1, linetype = "dashed") +  # expontential curve
+  geom_point(data = df_peaks, aes(x = Time, y = Value), color = "red", size = 2, shape = 17) +  #
+  geom_point(data = df_valleys, aes(x = Time, y = Value), color = "green", size = 2, shape = 18) +
+  labs(title = "X1 Data with Exponential Curve Fitting",
+       x = "Time",
+       y = "X1(t)") +
+  theme_minimal() +
+  scale_y_continuous(limits = c(0, max(X1) * 1.1))  #
+
+
+```
+using lm(),I cannot get a good fit, 
+so I try to use nls to find initial A and gamma：
+```{r}
+
+
+nls_fit <- nls(y_peaks ~ A_max * exp(eta_max * t_peaks), 
+               start = list(A_max = max(y_peaks), eta_max = -0.01), 
+               control = nls.control(maxiter = 100))
+
+
+A_max <- coef(nls_fit)["A_max"]
+eta_max <- coef(nls_fit)["eta_max"]
+
+# generate curve
+exp_curve <- A_max * exp(eta_max * time)
+
+
+df_exp_curve <- data.frame(Time = time, ExponentialCurve = exp_curve)
+ggplot(df_MC, aes(x = Time, y = X1)) +
+  geom_line(color = "blue", size = 1) +
+  geom_line(data = df_exp_curve, aes(x = Time, y = ExponentialCurve), color = "purple", size = 1, linetype = "dashed") +
+  geom_point(data = df_peaks, aes(x = Time, y = Value), color = "red", size = 2, shape = 17) +
+  labs(title = "X1 Data with Improved Exponential Curve Fitting",
+       x = "Time",
+       y = "X1(t)") +
+  theme_minimal() +
+  scale_y_continuous(limits = c(0, max(X1) * 1.1))
+
+```
+still not good fit，
+
+try to fit in 2 segments time before 100 and time after 100
+```{r}
+#  split data for early(t<100) and late segments(t>=100)
+time_early <- time[time < 100]
+time_late <- time[time >= 100]
+
+y_peaks_early <- y_peaks[t_peaks < 100]
+t_peaks_early <- t_peaks[t_peaks < 100]
+y_valleys_early <- y_valleys[t_valleys < 100]
+t_valleys_early <- t_valleys[t_valleys < 100]
+
+y_peaks_late <- y_peaks[t_peaks >= 100]
+t_peaks_late <- t_peaks[t_peaks >= 100]
+y_valleys_late <- y_valleys[t_valleys >= 100]
+t_valleys_late <- t_valleys[t_valleys >= 100]
+
+# exponential fit when t <100
+log_y_peaks_early <- log(y_peaks_early)
+log_y_valleys_early <- log(y_valleys_early)
+
+fit_peaks_early <- lm(log_y_peaks_early ~ t_peaks_early)
+fit_valleys_early <- lm(log_y_valleys_early ~ t_valleys_early)
+
+A_max_early <- exp(coef(fit_peaks_early)[1])
+eta_max_early <- -coef(fit_peaks_early)[2]
+A_min_early <- exp(coef(fit_valleys_early)[1])
+eta_min_early <- -coef(fit_valleys_early)[2]
+
+# exponential fit when t > 100
+log_y_peaks_late <- log(y_peaks_late)
+log_y_valleys_late <- log(y_valleys_late)
+
+fit_peaks_late <- lm(log_y_peaks_late ~ t_peaks_late)
+fit_valleys_late <- lm(log_y_valleys_late ~ t_valleys_late)
+
+A_max_late <- exp(coef(fit_peaks_late)[1])
+eta_max_late <- -coef(fit_peaks_late)[2]
+A_min_late <- exp(coef(fit_valleys_late)[1])
+eta_min_late <- -coef(fit_valleys_late)[2]
+
+# print results
+cat("For time < 100:\n")
+cat("A_max_early:", A_max_early, "\n")
+cat("eta_max_early:", eta_max_early, "\n")
+cat("A_min_early:", A_min_early, "\n")
+cat("eta_min_early:", eta_min_early, "\n\n")
+
+cat("For time > 100:\n")
+cat("A_max_late:", A_max_late, "\n")
+cat("eta_max_late:", eta_max_late, "\n")
+cat("A_min_late:", A_min_late, "\n")
+cat("eta_min_late:", eta_min_late, "\n")
+
+```
+#plot curve to test 
+```{r}
+# Generate exponential curves for early and late segments
+max_exp_curve_early <- A_max_early * exp(-eta_max_early * time_early)
+min_exp_curve_early <- A_min_early * exp(-eta_min_early * time_early)
+
+max_exp_curve_late <- A_max_late * exp(-eta_max_late * time_late)
+min_exp_curve_late <- A_min_late * exp(-eta_min_late * time_late)
+
+# Convert data to data frames for ggplot
+df_exp_curve_early <- data.frame(Time = time_early, MaxExpCurve = max_exp_curve_early, MinExpCurve = min_exp_curve_early)
+df_exp_curve_late <- data.frame(Time = time_late, MaxExpCurve = max_exp_curve_late, MinExpCurve = min_exp_curve_late)
+
+# Peaks and valleys of the original data
+df_peaks <- data.frame(Time = t_peaks, Value = y_peaks)
+df_valleys <- data.frame(Time = t_valleys, Value = y_valleys)
+
+# Plot the original data and the fitted exponential curves
+ggplot(df_MC, aes(x = Time, y = X1)) +
+  geom_line(color = "blue", size = 1) +  # original data
+  geom_line(data = df_exp_curve_early, aes(x = Time, y = MaxExpCurve), color = "purple", size = 1, linetype = "dashed") +  # Early segment max exponential curve
+  geom_line(data = df_exp_curve_early, aes(x = Time, y = MinExpCurve), color = "yellow", size = 1, linetype = "dashed") +  # Early segment min exponential curve
+  geom_line(data = df_exp_curve_late, aes(x = Time, y = MaxExpCurve), color = "purple", size = 1, linetype = "dotted") +  # late segment min exponential curve
+  geom_line(data = df_exp_curve_late, aes(x = Time, y = MinExpCurve), color = "yellow", size = 1, linetype = "dotted") +  # late segment min exponential curve
+  geom_point(data = df_peaks, aes(x = Time, y = Value), color = "red", size = 2, shape = 17) +  # Red points marking peaks
+  geom_point(data = df_valleys, aes(x = Time, y = Value), color = "green", size = 2, shape = 18) +  # Green points marking valleys
+  labs(title = "X1 Data with Early and Late Exponential Curve Fitting",
+       x = "Time",
+       y = "X1(t)") +
+  theme_minimal() +
+  scale_y_continuous(limits = c(0, max(X1) * 1.1))  # Adjust y-axis range to better display data
+
+```
+
+now calculate omega for time <100 and time>=100
+```{r}
+# For time < 100
+# Calculate Delta and omega for early segment (time < 100)
+Delta_early <- t_peaks_early[2] - t_peaks_early[1]  # Assuming the first two peaks are used
+omega_early <- 2 * pi / Delta_early
+
+# For time >= 100
+# Calculate Delta and omega for late segment (time >= 100)
+Delta_late <- t_peaks_late[2] - t_peaks_late[1]  # Assuming the first two peaks in the late segment are used
+omega_late <- 2 * pi / Delta_late
+
+# Print results
+cat("For time < 100:\n")
+cat("Delta_early:", Delta_early, "\n")
+cat("omega_early:", omega_early, "\n\n")
+
+cat("For time >= 100:\n")
+cat("Delta_late:", Delta_late, "\n")
+cat("omega_late:", omega_late, "\n")
+
+```
+
+```{r}
+#initial meeting model function
+asym_model_function <- function(t, A_max, eta_max, A_min, eta_min, omega, phi_j) {
+  
+  A_max_t <- A_max * exp(-eta_max * t)
+  A_min_t <- A_min * exp(-eta_min * t)
+  
+  result <- 0.5 * (A_max_t + A_min_t) + 0.5 * (A_max_t - A_min_t) * cos(omega * t + phi_j)
+  return(result)
+}
+
+```
+
+
+
+
+Detrending the Data (Exponential Method)
+```{r}
+# # Define detrending function using exponential method
+# detrend_exponential <- function(time, data_column) {
+#   # Fit an exponential model
+#   trend_model_exp <- lm(log(data_column) ~ time)
+#   
+#   # Detrend the data by subtracting the fitted exponential trend
+#   detrended_data <- data_column - exp(fitted(trend_model_exp))
+#   
+#   return(detrended_data)
+# }
+# 
+# # Apply detrending to each column
+# detrended_X1 <- detrend_exponential(df_MC$Time, df_MC$X1)
+# detrended_X2 <- detrend_exponential(df_MC$Time, df_MC$X2)
+# detrended_X3 <- detrend_exponential(df_MC$Time, df_MC$X3)
+# detrended_X4 <- detrend_exponential(df_MC$Time, df_MC$X4)
+# 
+# # Plot detrended data
+# plot(df_MC$Time, detrended_X1, type = "l", col = "blue", xlab = "Time", ylab = "Detrended Values", 
+#      main = "Detrended X1, X2, X3, X4 (Exponential)")
+# lines(df_MC$Time, detrended_X2, type = "l", col = "green")
+# lines(df_MC$Time, detrended_X3, type = "l", col = "red")
+# lines(df_MC$Time, detrended_X4, type = "l", col = "purple")
+# 
+# legend("topright", legend = c("X1", "X2", "X3", "X4"), col = c("blue", "green", "red", "purple"), lty = 1, cex = 0.8)
+
+```
+Spline Smooth
+```{r}
+# # Spline smoothing for detrended data
+# spline_detrend_X1 <- predict(smooth.spline(df_MC$Time, detrended_X1))
+# spline_detrend_X2 <- predict(smooth.spline(df_MC$Time, detrended_X2))
+# spline_detrend_X3 <- predict(smooth.spline(df_MC$Time, detrended_X3))
+# spline_detrend_X4 <- predict(smooth.spline(df_MC$Time, detrended_X4))
+# 
+# # Plot the spline-smoothed data
+# plot(df_MC$Time, spline_detrend_X1$y, type = "l", col = "red", lwd = 2, 
+#      xlab = "Time", ylab = "Values", main = "Detrended Splines", 
+#      ylim = range(c(spline_detrend_X1$y, spline_detrend_X2$y, spline_detrend_X3$y, spline_detrend_X4)))
+# lines(df_MC$Time, spline_detrend_X2$y, col = "blue", lwd = 2)
+# lines(df_MC$Time, spline_detrend_X3$y, col = "green", lwd = 2)
+# lines(df_MC$Time, spline_detrend_X4$y, col = "purple", lwd = 2)
+# 
+# legend("topright", legend = c("spline_detrend_X1", "spline_detrend_X2", "spline_detrend_X3", "spline_detrend_X4"), 
+#        col = c("red", "blue", "green", "purple"), lwd = 2)
+
+```
+Nonlinear Least Squares Model Fitting with Weights
+##time specific
+
+```{r}
+# Define the model function
+model_function <- function(t, A, gamma, omega, phi, y_shift) {
+  A * exp(-gamma * t ) * cos(omega * t + phi) + y_shift
+}
+# Function to calculate variance at each time point
+calculate_variance <- function(replicates) {
+  n <- nrow(replicates)
+  mean_vals <- rowMeans(replicates)  # Mean for each time point
+  variance <- rowSums((replicates - mean_vals)^2) / (n - 1)  # Variance formula
+  return(variance)
+}
+# Weighted nonlinear least squares estimation
+weighted_nls <- function(t, replicates, initial_params) {
+  variances <- calculate_variance(replicates)  # Variance at each time point
+
+  # Fit the model using nlsLM
+  fit <- nlsLM(y ~ model_function(t, A, gamma, omega, phi, y_shift),
+               start = initial_params,
+               data = list(t = t, y = rowMeans(replicates)),
+               weights = 1 / variances)  # Weight by the inverse of variances
+  return(fit)
+}
+# Use data from replicates for fitting
+replicates <- df_MC[, c("X1", "X2", "X3", "X4")]
+# Calculate variance
+variances <- calculate_variance(replicates)
+hist(variances, main = "Histogram of Variances",
+     xlab = "Variance",
+     ylab = "Frequency",
+     col = "lightblue",
+     border = "black")
+# Initial parameter estimates
+
+```
+
+
+
+
+
+
+
