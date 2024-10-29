@@ -670,6 +670,8 @@ cat("omega_late:", omega_late, "\n")
 
 ```
 
+
+then we should try to use initial parameters  fit  in nls and find mle
 ```{r}
 #initial meeting model function
 asym_model_function <- function(t, A_max, eta_max, A_min, eta_min, omega, phi_j) {
