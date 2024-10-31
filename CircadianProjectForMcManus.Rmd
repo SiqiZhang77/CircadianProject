@@ -738,7 +738,7 @@ Spline Smooth
 
 ```
 Nonlinear Least Squares Model Fitting with Weights
-##time specific
+##time specific function
 
 ```{r}
 # Define the model function
