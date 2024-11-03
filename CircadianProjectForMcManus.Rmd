@@ -15,7 +15,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ## R Markdown
 
 ```{r }
-# Load necessary libraries jiayi
+# Load necessary libraries 
 set.seed(123)
 library(ggplot2)
 library(splines)
