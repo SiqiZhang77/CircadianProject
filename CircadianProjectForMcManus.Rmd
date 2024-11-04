@@ -754,7 +754,7 @@ initial_params_early <- list(
   omega = omega_early,       
   phi_j = 0                  # Initial guess for phi_j
 )
-print(initial_params_early)
+
 # Fit the model for time < 100
 fit_nls_early <- nls(
   X1 ~ asym_model_function(Time, A_max, eta_max, A_min, eta_min, omega, phi_j),
@@ -816,7 +816,8 @@ kable(combined_data, caption = "Estimated Parameters with 99% Confidence Interva
 
 
 ```
-The code uses the estimated parameters for the \textit{time} $<$ 100 and \textit{time} $\geq$ 100 periods to generate predicted values using the \texttt{asym\_model\_function}. The original data points (in black) for both periods are overlaid with the model's predicted curves (in blue for \textit{early} and red for \textit{late}). The objective is to visually assess how well the model's predictions (based on estimated parameters) match the original data for both periods.
+I uses the estimated parameters for the \textit{time} $<$ 100 and \textit{time} $\geq$ 100 periods to generate predicted values using the \texttt{asym\_model\_function}. The original data points (in black) for both periods are overlaid with the model's predicted curves (in blue for \textit{early} and red for \textit{late}). The objective is to visually assess how well the model's predictions (based on estimated parameters) match the original data for both periods.
+
 
 ```{r}
 df_MC_early$predicted <- asym_model_function(df_MC_early$Time, estimates_early["A_max"], estimates_early["eta_max"], 
@@ -846,55 +847,7 @@ ggplot() +
 ```
 
 
-Detrending the Data (Exponential Method)
-```{r}
-# # Define detrending function using exponential method
-# detrend_exponential <- function(time, data_column) {
-#   # Fit an exponential model
-#   trend_model_exp <- lm(log(data_column) ~ time)
-#   
-#   # Detrend the data by subtracting the fitted exponential trend
-#   detrended_data <- data_column - exp(fitted(trend_model_exp))
-#   
-#   return(detrended_data)
-# }
-# 
-# # Apply detrending to each column
-# detrended_X1 <- detrend_exponential(df_MC$Time, df_MC$X1)
-# detrended_X2 <- detrend_exponential(df_MC$Time, df_MC$X2)
-# detrended_X3 <- detrend_exponential(df_MC$Time, df_MC$X3)
-# detrended_X4 <- detrend_exponential(df_MC$Time, df_MC$X4)
-# 
-# # Plot detrended data
-# plot(df_MC$Time, detrended_X1, type = "l", col = "blue", xlab = "Time", ylab = "Detrended Values", 
-#      main = "Detrended X1, X2, X3, X4 (Exponential)")
-# lines(df_MC$Time, detrended_X2, type = "l", col = "green")
-# lines(df_MC$Time, detrended_X3, type = "l", col = "red")
-# lines(df_MC$Time, detrended_X4, type = "l", col = "purple")
-# 
-# legend("topright", legend = c("X1", "X2", "X3", "X4"), col = c("blue", "green", "red", "purple"), lty = 1, cex = 0.8)
 
-```
-Spline Smooth
-```{r}
-# # Spline smoothing for detrended data
-# spline_detrend_X1 <- predict(smooth.spline(df_MC$Time, detrended_X1))
-# spline_detrend_X2 <- predict(smooth.spline(df_MC$Time, detrended_X2))
-# spline_detrend_X3 <- predict(smooth.spline(df_MC$Time, detrended_X3))
-# spline_detrend_X4 <- predict(smooth.spline(df_MC$Time, detrended_X4))
-# 
-# # Plot the spline-smoothed data
-# plot(df_MC$Time, spline_detrend_X1$y, type = "l", col = "red", lwd = 2, 
-#      xlab = "Time", ylab = "Values", main = "Detrended Splines", 
-#      ylim = range(c(spline_detrend_X1$y, spline_detrend_X2$y, spline_detrend_X3$y, spline_detrend_X4)))
-# lines(df_MC$Time, spline_detrend_X2$y, col = "blue", lwd = 2)
-# lines(df_MC$Time, spline_detrend_X3$y, col = "green", lwd = 2)
-# lines(df_MC$Time, spline_detrend_X4$y, col = "purple", lwd = 2)
-# 
-# legend("topright", legend = c("spline_detrend_X1", "spline_detrend_X2", "spline_detrend_X3", "spline_detrend_X4"), 
-#        col = c("red", "blue", "green", "purple"), lwd = 2)
-
-```
 Nonlinear Least Squares Model Fitting with Weights
 ##time specific function
 
@@ -924,13 +877,54 @@ weighted_nls <- function(t, replicates, initial_params) {
 # Use data from replicates for fitting
 replicates <- df_MC[, c("X1", "X2", "X3", "X4")]
 # Calculate variance
-variances <- calculate_variance(replicates)
+observed_variances <- calculate_variance(replicates)
 hist(variances, main = "Histogram of Variances",
      xlab = "Variance",
      ylab = "Frequency",
      col = "lightblue",
      border = "black")
-# Initial parameter estimates 111
+
+
+```
+
+
+
+
+
+
+
+```{r}
+# # Define the Bayesian inference function
+bayesian_variance_estimation <- function(observed_variances, n, alpha_prior = 1, beta_prior = 1) {
+  # Input parameters:
+  # - observed_variances: a vector of observed variances
+  # - n: the number of samples at each time point
+  # - alpha_prior, beta_prior: parameters for the Gamma prior distribution
+  # Create a vector to store the estimated weight
+  weights <- numeric(length(observed_variances))
+  
+  # # Iterate over each observed variance and perform Bayesian inference
+  for (i in 1:length(observed_variances)) {
+    S2_i <- observed_variances[i]
+    
+    alpha_post <- alpha_prior + (n - 1) / 2 # Update the posterior parameters
+    beta_post <- beta_prior + S2_i * (n - 1) / 2 
+    posterior_mean <- alpha_post / beta_post  # Calculate the mean of the posterior distribution 
+                                              #  (mean of a Gamma distribution is shape/scale)
+    weights[i] <- posterior_mean  # Use the posterior mean as the reliable weight
+  }
+  return(weights)
+}
+# # Set prior parameters (can be adjusted as needed)
+alpha_prior <- 1.5  # Gamma： shape
+beta_prior <- 2   # Gamma： scale
+# Number of samples
+n <- ncol(replicates)
+# Calculate reliable weights using Bayesian inference
+weights <- bayesian_variance_estimation(observed_variances, n, alpha_prior, beta_prior)
+# Plot a histogram of the adjusted Bayesian weights
+hist(weights, main = "Histogram of Bayesian Adjusted Weights",
+     xlab = "Adjusted Weight", ylab = "Frequency", col = "lightblue", border = "black")
 
 ```
 
