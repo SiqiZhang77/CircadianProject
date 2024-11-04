@@ -1,10 +1,13 @@
+
+
 ---
 title: "data_analysis_for_McManus"
 author: "Siqi"
 date: "`r Sys.Date()`"
 output:
   html_document: default
-  pdf_document: default
+  pdf_document:
+    latex_engine: xelatex
   word_document: default
 ---
 
@@ -26,6 +29,7 @@ library(pracma)
 library(nls2)
 
 
+
 ```
 
 ## Including Plots
@@ -35,7 +39,7 @@ Data Cleaning and Plotting
 ```{r  }
 # Load and process the  
 library(readxl)
-Data_McManus2_WT_P2L_AAVCremCherry <- read_excel("/Users/angelzhang/Downloads/CircadianProject/Data_McManus2_WT_P2L_AAVCremCherry.xlsx")
+Data_McManus2_WT_P2L_AAVCremCherry <- read_excel("Data_McManus2_WT_P2L_AAVCremCherry.xlsx")
 
 
 df_MC <- as.data.frame(Data_McManus2_WT_P2L_AAVCremCherry)
@@ -151,8 +155,8 @@ plot(t, simulated_data, type = "l", col = "blue", main = "Simulated Data", xlab 
 
 
 
-##Task1
-##generate simulating data 1 time
+## Task1
+## generate simulating data 1 time
 
 ```{r}
 
@@ -192,7 +196,7 @@ y_peaks <- peaks[, 1]
 plot(t, y_sim, type = "l", col = "blue", main = "Simulated Data with Peaks", xlab = "Time", ylab = "Simulated Values")
 points(t_peaks, y_peaks, col = "red", pch = 19)
 ```
-##Finding initial parameters:A and gamma
+## Finding initial parameters:A and gamma for simulated data
 ```{r}
 # transform into log
 log_y_peaks <- log(y_peaks)
@@ -232,7 +236,7 @@ legend("topright", legend = c("Simulated Data", "Fitted Exponential"), col = c("
 
 ```
 
-##find initial value：omega
+## find initial value：omega
 ```{r}
 # Extract the time points of the first two consecutive maxima from t_peaks
 t_max1 <- t_peaks[1]  # First maximum
@@ -266,78 +270,108 @@ fit_nls
 
 ```
 
+## method used inside vcov()
+The code below manually calculates the covariance matrix of a linear regression model and verifies its consistency with the automatically computed result from the `lm` function.
 
-###Tasks 3
+Specifically, it first generates data and constructs the design matrix \(X\). Then, it manually computes the regression coefficients using the formula 
+\[
+\hat{\beta} = (X^T X)^{-1} X^T y.
+\]
+
+Next, the covariance matrix is calculated with the formula 
+\[
+\text{Cov}(\hat{\beta}) = (X^T X)^{-1} \cdot \frac{\sum \text{resid}^2}{\text{df.res}},
+\]
+where \(\text{resid} = y - X\hat{\beta}\) represents the residuals and \(\text{df.res}\) is the degrees of freedom, used to adjust the error variance.
+
+Finally, `all.equal` is used to compare the manually computed covariance matrix with the result from `vcov(mod)`, confirming their consistency, with the result `TRUE` indicating agreement.
+
+
 ```{r}
+library(data.table)
+df     = data.table(y = runif(100, 0, 100),  #generates 100 random deviates. for 0<x,y,z<100
+                    x = runif(100, 0, 100),
+                    z = runif(100, 0, 100))
+mod    = lm(y ~ ., df)
+X      = cbind(1, as.matrix(df[, -1])) #only include x and z
+invXtX = solve(crossprod(X)) # compute for inverse of crossproduct(X^t*X)
+coef   = invXtX %*% t(X) %*% df$y # compute coef manually: coef = (X^t*X)^(-1) *X^t*y
+resid  = df$y - X %*% coef # residual = real value - predict value
 
-#library(stats)   
+df.res = nrow(X) - ncol(X) #degree of freedom
+manual = invXtX * sum(resid**2)/(df.res) # 
+funct  = vcov(mod)
 
+print(mod)
+
+all.equal(manual, funct, check.attributes = F)
+
+```
+
+
+
+## Function of simulate_and_estimate: used for repeat simulating
+```{r}
+#install.packages("nlstools")
+library(nlstools)
+library(stats)
 simulate_and_estimate <- function(true_params, sigma0 = 10) {
-  
   #simulate data
   t <- seq(0, 100, by = 0.1)
-  
-  
   model_function <- function(t, A, gamma, omega, phi, y_shift) {
     A * exp(-gamma * t) * cos(omega * t + phi) + y_shift
   }
-  
-  
-  y_sim <- model_function(t, true_params[1], true_params[2], true_params[3], true_params[4], true_params[5]) + 
+  y_sim <- model_function(t, true_params[1], true_params[2], true_params[3], true_params[4], true_params[5]) +
     rnorm(length(t), mean = 0, sd = sigma0)
-  
+
   # find initial value
   peaks <- findpeaks(y_sim, minpeakheight = 100, minpeakdistance = 15)
   t_peaks <- t[peaks[, 2]]
   y_peaks <- peaks[, 1]
-  
+
   log_y_peaks <- log(y_peaks)
   fit_linear <- lm(log_y_peaks ~ t_peaks)
   log_A <- coef(fit_linear)[1]
   init_gamma <- -coef(fit_linear)[2]
   init_A <- exp(log_A)
-  
-  
+
+
   Delta <- t_peaks[2] - t_peaks[1]
   init_omega <- 2 * pi / Delta
-  
+
     # find estimated parameters
   fit_nls <- try(nls(
     y_sim ~ model_function(t, A, gamma, omega, phi, y_shift),
     start = list(A = init_A, gamma = init_gamma, omega = init_omega, phi = 0.1, y_shift = 0),
     data = data.frame(t = t, y_sim = y_sim)
   ), silent = TRUE)
-  
+  #print(summary(fit_nls))
+
+  #print(summary(fit_nls)$cov.unscaled)
+  #cov_matrix1 <- summary(fit_nls)$sigma^2 * summary(fit_nls)$cov.unscaled
+  #print(cov_matrix1)
+  #print(vcov(fit_nls))
   # check if fitted successful
   if (class(fit_nls) == "try-error") {
-    return(NULL)  
+    return(NULL)
   }
   # find estmate parameters and standard errors
   param_estimates <- coef(fit_nls)
-  cov_matrix <- vcov(fit_nls)
   
-  standard_errors <- sqrt(diag(cov_matrix))
-  z_value <- qnorm(0.995)
-  conf_intervals <- cbind(
-    param_estimates - z_value * standard_errors,
-    param_estimates + z_value * standard_errors
-  )
+  
+  # Calculate standard errors and confidence intervals
+  conf_intervals <- confint2(fit_nls, level = 0.99, method = 'asymptotic')
   return(list(estimates = param_estimates, conf_intervals = conf_intervals))
 }
 # test function
 true_params <- c(A = 1000, gamma = 0.025, omega = 0.9, phi = 0, y_shift = 0)
 result <- simulate_and_estimate(true_params)
-
 result
-
-
 ```
-##Task 3: repeat simulations
+## Task 3: repeat simulations
 ```{r}
-# simulat
+# simulate 100
 n_simulations <- 100
-
-# 
 results <- vector("list", n_simulations)
 # 
 for (i in 1:n_simulations) {
@@ -371,8 +405,8 @@ cat("Coverage for phi:", coverage_proportions[4], "\n")
 cat("Coverage for y_shift:", coverage_proportions[5], "\n")
 
 ```
-`
 
+## boxplot of estimated parames for 100 simulations
 
 ```{r}
 library(tidyverse) 
@@ -400,27 +434,31 @@ library(gridExtra) # arange multiple plots
 plot_A <- ggplot(estimate_long %>% filter(Parameter == "A"), 
                  aes(x = Parameter, y = Estimate)) +
   geom_boxplot(fill = "skyblue", color = "darkblue") +
+  geom_hline(yintercept = true_params["A"], linetype = "dashed") +
   labs(title = "A", y = "Estimate") +
   theme_minimal() +
-  ylim(995, 1006)
+  ylim(995, 1005)
 
 plot_gamma <- ggplot(estimate_long %>% filter(Parameter == "gamma"), 
                      aes(x = Parameter, y = Estimate)) +
   geom_boxplot(fill = "lightgreen", color = "darkgreen") +
+  geom_hline(yintercept = true_params["gamma"], linetype = "dashed") +
   labs(title = "gamma", y = "Estimate") +
   theme_minimal() +
-  ylim(0.02475, 0.02525)
+  ylim(0.0248, 0.02515)
 
 plot_omega <- ggplot(estimate_long %>% filter(Parameter == "omega"), 
                      aes(x = Parameter, y = Estimate)) +
   geom_boxplot(fill = "lightblue", color = "blue") +
+  geom_hline(yintercept = true_params["omega"], linetype = "dashed") +
   labs(title = "omega", y = "Estimate") +
   theme_minimal() +
-  ylim(0.8995, 0.9005)
+  ylim(0.89975, 0.90025)
 
 plot_phi <- ggplot(estimate_long %>% filter(Parameter == "phi"), 
                    aes(x = Parameter, y = Estimate)) +
   geom_boxplot(fill = "pink", color = "red") +
+  geom_hline(yintercept = true_params["phi"], linetype = "dashed") +
   labs(title = "phi", y = "Estimate") +
   theme_minimal() +
   ylim(min(estimate_data$phi) * 0.9, max(estimate_data$phi) * 1.1)
@@ -428,6 +466,7 @@ plot_phi <- ggplot(estimate_long %>% filter(Parameter == "phi"),
 plot_y_shift <- ggplot(estimate_long %>% filter(Parameter == "y_shift"), 
                        aes(x = Parameter, y = Estimate)) +
   geom_boxplot(fill = "yellow", color = "orange") +
+  geom_hline(yintercept = true_params["y_shift"], linetype = "dashed") +
   labs(title = "y_shift", y = "Estimate") +
   theme_minimal() +
   ylim(min(estimate_data$y_shift) * 0.9, max(estimate_data$y_shift) * 1.1)
@@ -435,9 +474,9 @@ plot_y_shift <- ggplot(estimate_long %>% filter(Parameter == "y_shift"),
 # Arrange all subplots into a single large plot.
 grid.arrange(plot_A, plot_gamma, plot_omega, plot_phi, plot_y_shift, ncol = 3)
 ```
-This plot indicates that most of the estimated parameters obtained from 100 simulations are close to the true parameters.
+This plot indicates that most of the estimated parameters obtained from 100 simulations are close to the true parameters.True parameters are indicated as blacked dashed line in above plot.
 
-##Task 4 
+## Task 4 
 
 finding initial parameters on asymmetric osillator model(on initial meeting file)
 ```{r}
@@ -503,7 +542,7 @@ cat("Initial tau:", tau, "\n")
 cat("Initial phi:", phi, "\n")
 
 ```
-##plot fitted curve to compare
+## plot fitted curve to compare
 ```{r}
 
 max_exp_curve <- A_max * exp(eta_max * time)
@@ -516,10 +555,10 @@ df_min_exp_curve <- data.frame(Time = time, ExponentialCurve = min_exp_curve)
 # 
 ggplot(df_MC, aes(x = Time, y = X1)) +
   geom_line(color = "blue", size = 1) +  # 
-  geom_line(data = df_max_exp_curve, aes(x = Time, y = ExponentialCurve), color = "purple", size = 1, linetype = "dashed") +  # expontential curve
-  geom_line(data = df_min_exp_curve, aes(x = Time, y = ExponentialCurve), color = "yellow", size = 1, linetype = "dashed") +  # expontential curve
-  geom_point(data = df_peaks, aes(x = Time, y = Value), color = "red", size = 2, shape = 17) +  #
-  geom_point(data = df_valleys, aes(x = Time, y = Value), color = "green", size = 2, shape = 18) +
+  geom_line(data = df_max_exp_curve, aes(x = Time, y = ExponentialCurve), color = "purple",  linewidth = 1, linetype = "dashed") +  # expontential curve
+  geom_line(data = df_min_exp_curve, aes(x = Time, y = ExponentialCurve), color = "yellow",  linewidth = 1, linetype = "dashed") +  # expontential curve
+  geom_point(data = df_peaks, aes(x = Time, y = Value), color = "red", linewidth = 2, shape = 17) +  #
+  geom_point(data = df_valleys, aes(x = Time, y = Value), color = "green", linewidth = 2, shape = 18) +
   labs(title = "X1 Data with Exponential Curve Fitting",
        x = "Time",
        y = "X1(t)") +
@@ -669,22 +708,43 @@ cat("Delta_late:", Delta_late, "\n")
 cat("omega_late:", omega_late, "\n")
 
 ```
+Create a chart to show parameters
+```{r}
+#install.packages("knitr") # Uncomment this line if knitr is not installed
+#install.packages("DT")    # Uncomment this line if DT is not installed
+library(knitr)
+library(DT)
+
+# Create a data frame
+result_table <- data.frame(
+  Parameter = c("A_max", "eta_max", "A_min", "eta_min", "Delta", "omega"),
+  `time < 100` = c(A_max_early, eta_max_early, A_min_early, eta_min_early, Delta_early, omega_early),
+  `time >= 100` = c(A_max_late, eta_max_late, A_min_late, eta_min_late, Delta_late, omega_late)
+)
+
+# Display the table
+# Method 1: Use knitr::kable to show a static table
+kable(result_table, caption = "Comparison Table for Time < 100 and Time >= 100")
+datatable(result_table, caption = "Comparison Table for Time < 100 and Time >= 100")
+```
 
 
 then we should try to use initial parameters  fit  in nls and find mle
 ```{r}
 #initial meeting model function
 asym_model_function <- function(t, A_max, eta_max, A_min, eta_min, omega, phi_j) {
-  
   A_max_t <- A_max * exp(-eta_max * t)
   A_min_t <- A_min * exp(-eta_min * t)
-  
   result <- 0.5 * (A_max_t + A_min_t) + 0.5 * (A_max_t - A_min_t) * cos(omega * t + phi_j)
   return(result)
 }
 
 ```
 
+We fit in nls model to see 
+```{r}
+
+```
 
 
 
@@ -772,7 +832,7 @@ hist(variances, main = "Histogram of Variances",
      ylab = "Frequency",
      col = "lightblue",
      border = "black")
-# Initial parameter estimates
+# Initial parameter estimates 111
 
 ```
 
