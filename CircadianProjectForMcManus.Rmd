@@ -570,8 +570,6 @@ ggplot(df_MC, aes(x = Time, y = X1)) +
 using lm(),I cannot get a good fit, 
 so I try to use nls to find initial A and gamma：
 ```{r}
-
-
 nls_fit <- nls(y_peaks ~ A_max * exp(eta_max * t_peaks), 
                start = list(A_max = max(y_peaks), eta_max = -0.01), 
                control = nls.control(maxiter = 100))
@@ -638,18 +636,6 @@ eta_max_late <- -coef(fit_peaks_late)[2]
 A_min_late <- exp(coef(fit_valleys_late)[1])
 eta_min_late <- -coef(fit_valleys_late)[2]
 
-# print results
-cat("For time < 100:\n")
-cat("A_max_early:", A_max_early, "\n")
-cat("eta_max_early:", eta_max_early, "\n")
-cat("A_min_early:", A_min_early, "\n")
-cat("eta_min_early:", eta_min_early, "\n\n")
-
-cat("For time > 100:\n")
-cat("A_max_late:", A_max_late, "\n")
-cat("eta_max_late:", eta_max_late, "\n")
-cat("A_min_late:", A_min_late, "\n")
-cat("eta_min_late:", eta_min_late, "\n")
 
 ```
 #plot curve to test 
@@ -698,15 +684,6 @@ omega_early <- 2 * pi / Delta_early
 Delta_late <- t_peaks_late[2] - t_peaks_late[1]  # Assuming the first two peaks in the late segment are used
 omega_late <- 2 * pi / Delta_late
 
-# Print results
-cat("For time < 100:\n")
-cat("Delta_early:", Delta_early, "\n")
-cat("omega_early:", omega_early, "\n\n")
-
-cat("For time >= 100:\n")
-cat("Delta_late:", Delta_late, "\n")
-cat("omega_late:", omega_late, "\n")
-
 ```
 Create a chart to show parameters
 ```{r}
@@ -729,7 +706,7 @@ datatable(result_table, caption = "Comparison Table for Time < 100 and Time >= 1
 ```
 
 
-then we should try to use initial parameters  fit  in nls and find mle
+
 ```{r}
 #initial meeting model function
 asym_model_function <- function(t, A_max, eta_max, A_min, eta_min, omega, phi_j) {
@@ -741,11 +718,132 @@ asym_model_function <- function(t, A_max, eta_max, A_min, eta_min, omega, phi_j)
 
 ```
 
-We fit in nls model to see 
+## Model Fitting for Asymmetrical Oscillatory Model with fixed variance
+
+In this analysis, we fit an asymmetrical oscillatory model to the McManus data(X1), using \( t = 100 \) as the boundary to split the data into two parts: \( t < 100 \) and \( t \geq 100 \). The model is given by:
+
+\[
+y_{i,j} \sim N(f_j(t_i), \sigma_i^2), \quad i = 1, \dots, n, \text{ independently}
+\]
+
+where the function \( f_j(t) \) is defined as:
+
+\[
+f_j(t) = 0.5 (A_{\text{max}}(t) + A_{\text{min}}(t)) + 0.5 (A_{\text{max}}(t) - A_{\text{min}}(t)) \cos(\tau t + \phi_j)
+\]
+
+Here, \( A_{\text{max}}(t) = A_{\text{max}} \cdot \exp(-\eta_{\text{max}} \cdot t) \) and \( A_{\text{min}}(t) = A_{\text{min}} \cdot \exp(-\eta_{\text{min}} \cdot t) \) represent the decaying maximum and minimum amplitudes over time, with parameters \( A_{\text{max}}, \eta_{\text{max}}, A_{\text{min}}, \eta_{\text{min}}, \tau \) (frequency), and \( \phi_j \) (phase shift) as the model parameters to be estimated.
+
+\section*{Fitting Procedure}
+
+We use the \texttt{nls} function in R to fit this non-linear model separately for the data segments \( t < 100 \) and \( t \geq 100 \), using appropriate initial parameter values for each segment based on prior analysis.
+
+Each model fit provides the estimated parameters \( A_{\text{max}}, \eta_{\text{max}}, A_{\text{min}}, \eta_{\text{min}}, \omega, \phi_j \) and their associated 99% confidence intervals.
+
 ```{r}
+# Split the data into two parts: time < 100 and time >= 100
+df_MC_early <- subset(df_MC, Time < 100)
+df_MC_late <- subset(df_MC, Time >= 100)
+
+# Define initial parameters for the time < 100 case
+initial_params_early <- list(
+  A_max = A_max_early,       
+  eta_max = eta_max_early,   
+  A_min = A_min_early,       
+  eta_min = eta_min_early,   
+  omega = omega_early,       
+  phi_j = 0                  # Initial guess for phi_j
+)
+print(initial_params_early)
+# Fit the model for time < 100
+fit_nls_early <- nls(
+  X1 ~ asym_model_function(Time, A_max, eta_max, A_min, eta_min, omega, phi_j),
+  start = initial_params_early,
+  data = df_MC_early
+)
+conf_intervals_early <- confint2(fit_nls_early, level = 0.99, method = 'asymptotic')
+cat("Fit results for time < 100:\n")
+coef(fit_nls_early)
 
 ```
 
+```{r}
+# Define initial parameters for the time >= 100 case
+initial_params_late <- list(
+  A_max = A_max_late,       
+  eta_max = eta_max_late,   
+  A_min = A_min_late,       
+  eta_min = eta_min_late,   
+  omega = omega_late,       
+  phi_j = 0                 # Initial guess for phi_j
+)
+
+# Fit the model for time >= 100
+fit_nls_late <- nls(
+  X1 ~ asym_model_function(Time, A_max, eta_max, A_min, eta_min, omega, phi_j),
+  start = initial_params_late,
+  data = df_MC_late
+)
+
+cat("Fit results for time >= 100:\n")
+summary(fit_nls_late)
+conf_intervals_late <- confint2(fit_nls_late, level = 0.99, method = 'asymptotic')
+
+
+```
+The code below extracts the estimated parameters (\( A_{\text{max}} \), \( \eta_{\text{max}} \), \( A_{\text{min}} \), \( \eta_{\text{min}} \), \( \omega \), \( \phi_j \)) and their corresponding 99\% confidence intervals for both \textit{early} (time $<$ 100) and \textit{late} (time $\geq$ 100) periods. It combines these values into a single data frame (\texttt{combined\_data}) that lists each parameter with its estimate, lower bound (0.5\%), and upper bound (99.5\%) for both time periods. The purpose is to organize the parameter estimates and confidence intervals in a structured format, enabling easy comparison between the two time periods.
+
+```{r}
+estimates_early <- coef(fit_nls_early)
+lower_early <- conf_intervals_early[, 1]
+upper_early <- conf_intervals_early[, 2]
+
+estimates_late <- coef(fit_nls_late)
+lower_late <- conf_intervals_late[, 1]
+upper_late <- conf_intervals_late[, 2]
+
+
+combined_data <- data.frame(
+  Parameter = rep(names(estimates_early), 2),  
+  Time_Period = rep(c("time < 100", "time >= 100"), each = length(estimates_early)),  
+  Estimate = c(estimates_early, estimates_late),  
+  Lower_0.5 = c(lower_early, lower_late), 
+  Upper_99.5 = c(upper_early, upper_late)  
+)
+
+
+kable(combined_data, caption = "Estimated Parameters with 99% Confidence Intervals for Different Time Periods")
+
+
+```
+The code uses the estimated parameters for the \textit{time} $<$ 100 and \textit{time} $\geq$ 100 periods to generate predicted values using the \texttt{asym\_model\_function}. The original data points (in black) for both periods are overlaid with the model's predicted curves (in blue for \textit{early} and red for \textit{late}). The objective is to visually assess how well the model's predictions (based on estimated parameters) match the original data for both periods.
+
+```{r}
+df_MC_early$predicted <- asym_model_function(df_MC_early$Time, estimates_early["A_max"], estimates_early["eta_max"], 
+                                             estimates_early["A_min"], estimates_early["eta_min"], 
+                                             estimates_early["omega"], estimates_early["phi_j"])
+
+df_MC_late$predicted <- asym_model_function(df_MC_late$Time, estimates_late["A_max"], estimates_late["eta_max"], 
+                                            estimates_late["A_min"], estimates_late["eta_min"], 
+                                            estimates_late["omega"], estimates_late["phi_j"])
+
+
+
+
+ggplot() +
+ 
+  geom_point(data = df_MC_early, aes(x = Time, y = X1), color = "black", size = 0.3) +
+  geom_line(data = df_MC_early, aes(x = Time, y = predicted), color = "blue", size = 0.5) +
+ 
+  geom_point(data = df_MC_late, aes(x = Time, y = X1), color = "black", size = 0.3) +
+  geom_line(data = df_MC_late, aes(x = Time, y = predicted), color = "red", size = 0.5) +
+ 
+  labs(title = "Comparison of Original Data and Model Fit",
+       x = "Time",
+       y = "X1") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
 
 
 Detrending the Data (Exponential Method)
