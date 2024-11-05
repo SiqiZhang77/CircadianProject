@@ -849,7 +849,7 @@ ggplot() +
 
 
 Nonlinear Least Squares Model Fitting with Weights
-##time specific function
+## time specific function
 
 ```{r}
 # Define the model function
@@ -889,8 +889,67 @@ hist(variances, main = "Histogram of Variances",
 
 
 
+## bayesian inference for variance
 
+\section*{1. Likelihood Function}
 
+Suppose we have a sample \( X_1, X_2, \dots, X_n \) drawn from a normal distribution \( \mathcal{N}(\mu, \sigma^2) \), with an observed sample variance \( S_i^2 \). Then, the distribution of the observed sample variance is:
+\[
+\frac{(n-1) S_i^2}{\sigma_i^2} \sim \chi^2_{n-1}
+\]
+where \( \chi^2_{n-1} \) denotes a chi-squared distribution with \( n-1 \) degrees of freedom.
+
+Therefore, given \( \sigma_i^2 \), the probability density function (likelihood function) of the sample variance \( S_i^2 \) can be written as:
+\[
+P(S_i^2 | \sigma_i^2) \propto \left( \frac{1}{\sigma_i^2} \right)^{(n-1)/2} \exp \left( -\frac{(n-1) S_i^2}{2 \sigma_i^2} \right)
+\]
+
+\section*{2. Prior Distribution}
+
+For simplicity, we assume the inverse of the variance \( \sigma_i^{-2} \) follows a Gamma distribution:
+\[
+\sigma_i^{-2} \sim \text{Gamma}(\alpha_{\text{prior}}, \beta_{\text{prior}})
+\]
+The probability density function of the Gamma distribution is:
+\[
+P(\sigma_i^{-2}) \propto (\sigma_i^{-2})^{\alpha_{\text{prior}} - 1} \exp(-\beta_{\text{prior}} \cdot \sigma_i^{-2})
+\]
+
+\section*{3. Posterior Distribution Calculation}
+
+According to Bayes' theorem, the posterior distribution \( P(\sigma_i^{-2} | S_i^2) \) is proportional to the product of the prior distribution and the likelihood function:
+\[
+P(\sigma_i^{-2} | S_i^2) \propto P(S_i^2 | \sigma_i^2) \cdot P(\sigma_i^{-2})
+\]
+Substituting the likelihood function and prior distribution, we have:
+\[
+P(\sigma_i^{-2} | S_i^2) \propto (\sigma_i^{-2})^{(n-1)/2} \exp \left( -\frac{(n-1) S_i^2}{2} \sigma_i^{-2} \right) \cdot (\sigma_i^{-2})^{\alpha_{\text{prior}} - 1} \exp(-\beta_{\text{prior}} \cdot \sigma_i^{-2})
+\]
+Combining the exponents, we get:
+\[
+P(\sigma_i^{-2} | S_i^2) \propto (\sigma_i^{-2})^{\alpha_{\text{prior}} + (n-1)/2 - 1} \exp \left( -\left( \beta_{\text{prior}} + \frac{(n-1) S_i^2}{2} \right) \sigma_i^{-2} \right)
+\]
+
+\section*{4. Form of the Posterior Distribution}
+
+We observe that this expression still has the form of a Gamma distribution. Therefore, the posterior distribution \( P(\sigma_i^{-2} | S_i^2) \) is a Gamma distribution, with posterior parameters:
+\begin{itemize}
+    \item \textbf{Posterior shape parameter} \( \alpha_{\text{post}} \):
+    \[
+    \alpha_{\text{post}} = \alpha_{\text{prior}} + \frac{n-1}{2}
+    \]
+    \item \textbf{Posterior scale parameter} \( \beta_{\text{post}} \):
+    \[
+    \beta_{\text{post}} = \beta_{\text{prior}} + \frac{(n-1) S_i^2}{2}
+    \]
+\end{itemize}
+
+\section*{5. Using the Posterior Mean as a Weight}
+
+The mean of a Gamma distribution is given by \( \frac{\text{shape}}{\text{scale}} \), so the mean of the posterior distribution (used as an estimate of the inverse variance) is:
+\[
+\text{Posterior Mean} = \frac{\alpha_{\text{post}}}{\beta_{\text{post}}}
+\]
 
 
 ```{r}
@@ -916,8 +975,8 @@ bayesian_variance_estimation <- function(observed_variances, n, alpha_prior = 1,
   return(weights)
 }
 # # Set prior parameters (can be adjusted as needed)
-alpha_prior <- 1.5  # Gamma： shape
-beta_prior <- 2   # Gamma： scale
+alpha_prior <- 2.5  # Gamma： shape
+beta_prior <- 7   # Gamma： scale
 # Number of samples
 n <- ncol(replicates)
 # Calculate reliable weights using Bayesian inference
