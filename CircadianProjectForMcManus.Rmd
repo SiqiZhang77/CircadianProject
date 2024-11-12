@@ -698,7 +698,40 @@ result_table <- data.frame(
 kable(result_table, caption = "Comparison Table for Time < 100 and Time >= 100")
 datatable(result_table, caption = "Comparison Table for Time < 100 and Time >= 100")
 ```
+## Find phi for assymmetric model
+```{r}
+# when t = 1:
+A_max_1 <- A_max_early * exp(-eta_max_early * 1)
+A_min_1 <- A_min_early * exp(-eta_min_early * 1)
 
+# the value of f(1)
+f1 <- df_MC$X1[df_MC$Time == 1]
+
+# phi
+cos_omega_phi <- (f1 - 0.5 * (A_max_1 + A_min_1)) / (0.5 * (A_max_1 - A_min_1))
+phi_initial <- acos(cos_omega_phi) - omega_early  
+
+# 
+print(phi_initial)
+
+```
+
+```{r}
+# when t = 102
+A_max_102 <- A_max_late * exp(-eta_max_late * 102)
+A_min_102 <- A_min_late * exp(-eta_min_late * 102)
+
+# the value of f(1)
+f102 <- df_MC$X1[df_MC$Time == 102]
+
+# phi
+cos_omega_phi102 <- (f1 - 0.5 * (A_max_102 + A_min_102)) / (0.5 * (A_max_102 - A_min_102))
+phi_102 <- acos(cos_omega_phi102) - omega_late  
+
+# 
+print(phi_102)
+
+```
 
 
 ```{r}
@@ -807,22 +840,22 @@ summary(fit_nls)
 \textbf{using "brute-force" in nls2}：I found that the model is not fitting(as initial parameters = estimated parameters)
 ```{r}
 true_params_asym = c(A_max =2000 , eta_max = 0.005, A_min =200, eta_min = 0.0025,omega = 0.7, phi = 0)
-# 定义存储结果的列表
+
 coverage_results <- list(
   A_max = 0, eta_max = 0, A_min = 0, eta_min = 0, omega = 0, phi = 0
 )
 
-# 定义循环次数和置信水平
+
 num_simulations <- 2
 confidence_level <- 0.99
-z_score <- qnorm((1 + confidence_level) / 2)  # 计算z值
+z_score <- qnorm((1 + confidence_level) / 2)  
 sigma0=1
-# 循环模拟数据和估计参数
+
 for (i in 1:num_simulations) {
-  # Step 1: 生成模拟数据
+  
   simulated_data <- simulate_asymm_func(t, true_params_asym, sigma0)
   
-  # Step 2: 计算初始参数
+  
   peaks <- findpeaks(simulated_data, minpeakheight = 600, minpeakdistance = 20)
 
   t_peaks <- t[peaks[, 2]]
@@ -849,7 +882,7 @@ for (i in 1:num_simulations) {
     omega = omega_sim, phi = 0
   )
   print(paste("Iteration:", i, "Initial Params:", initial_params))
-  # Step 3: 使用nls2进行参数估计
+ 
   fit_nls <- nls2(
         simulated_data ~ asym_model_function(t, A_max, eta_max, A_min, eta_min, omega, phi),
         start = initial_params, 
@@ -857,47 +890,47 @@ for (i in 1:num_simulations) {
         data = data.frame(t = t, simulated_data = simulated_data)
       )
   
-  estimated_params <- coef(fit_nls)  # 获取估计的参数值
+  estimated_params <- coef(fit_nls)  
   print(paste("Iteration:", i, "Estimated Params:", estimated_params))
-  param_se <- summary(fit_nls)$coefficients[, "Std. Error"]  # 获取标准误差
+  param_se <- summary(fit_nls)$coefficients[, "Std. Error"]  
   
   conf_intervals <- confint2(fit_nls, level = 0.99, method = 'asymptotic')
   
-  # Step 5: 计算覆盖率
+ 
   for (param in names(coverage_results)) {
-      # 确保参数名称匹配
+      
       true_value <- true_params_asym[[param]]
       lower_bound <- conf_intervals[param, 1]
       upper_bound <- conf_intervals[param, 2]
       
-      # 检查真值是否在置信区间内
+     
       if (true_value >= lower_bound && true_value <= upper_bound) {
         coverage_results[[param]] <- coverage_results[[param]] + 1
       }
     }
 }
-# Step 6: 计算覆盖率（百分比）
+
 coverage_results <- sapply(coverage_results, function(x) x / num_simulations)
 print(coverage_results)
 
 ```
 ```{r}
  
-# 定义存储结果的列表
+# list to store  results
 coverage_results <- list(
   A_max = 0, eta_max = 0, A_min = 0, eta_min = 0, omega = 0, phi = 0
 )
 print(true_params_asym)
-# 定义循环次数和置信水平
+
 num_simulations <- 100
 
 sigma0 = 10
-# 循环模拟数据和估计参数
+
 for (i in 1:num_simulations) {
-  # Step 1: 生成模拟数据
+
   simulated_data <- simulate_asymm_func(t, true_params_asym, sigma0) 
   
-  # Step 2: 计算初始参数
+  
   peaks <- findpeaks(simulated_data, minpeakheight = 600, minpeakdistance = 20)
   t_peaks <- t[peaks[, 2]]
   y_peaks <- peaks[, 1]
@@ -921,7 +954,7 @@ for (i in 1:num_simulations) {
     A_min = A_min_sim, eta_min = eta_min_sim, 
     omega = omega_sim, phi = 0
   )
-  # Step 3: 使用 tryCatch 捕获 nlsLM 中的错误
+
   library(minpack.lm)
   fit_nls <- tryCatch(
     {
@@ -933,34 +966,34 @@ for (i in 1:num_simulations) {
     },
     error = function(e) {
       message("Fitting failed for iteration ", i)
-      return(NULL)  # 返回NULL以跳过该次迭代
+      return(NULL)  
     }
   )
   
-  # 如果拟合失败，跳过本次循环
+ 
   if (is.null(fit_nls)) next
   
-  estimated_params <- coef(fit_nls)  # 获取估计的参数值
+  estimated_params <- coef(fit_nls)  
   # print(initial_params)
   # print(estimated_params)
   conf_intervals <- confint2(fit_nls, level = 0.99, method = 'asymptotic')
   
   rownames(conf_intervals) <- c("A_max", "eta_max", "A_min", "eta_min", "omega", "phi")
   
-  # Step 5: 计算覆盖率
+  # coverage
   for (param in names(coverage_results)) {
-    # 获取真值、置信区间的下限和上限
+    
     true_value <- true_params_asym[[param]]
     lower_bound <- conf_intervals[param, 1]
     upper_bound <- conf_intervals[param, 2]
     
-    # 检查真值是否在置信区间内
+    
     if (true_value >= lower_bound && true_value <= upper_bound) {
       coverage_results[[param]] <- coverage_results[[param]] + 1
     }
   }
 }
-#Step 6: 计算覆盖率（百分比）
+
 coverage_results <- sapply(coverage_results, function(x) x / num_simulations)
 print(coverage_results)
 ```
@@ -1000,7 +1033,7 @@ initial_params_early <- list(
   A_min = A_min_early,       
   eta_min = eta_min_early,   
   omega = omega_early,       
-  phi_j = 0                  # Initial guess for phi_j
+  phi_j = phi_initial            
 )
 
 # Fit the model for time < 100
@@ -1026,12 +1059,13 @@ fit_nlsLM_early <- tryCatch({
   message("Fitting failed for the early time period")
   return(NULL)
 })
-
+estimated_early_params <- coef(fit_nlsLM_early)
+names(estimated_early_params)<-c("A_max", "eta_max", "A_min", "eta_min", "omega", "phi")
 # Check if fitting was successful before calculating confidence intervals
 if (!is.null(fit_nlsLM_early)) {
   conf_intervals_early <- confint2(fit_nlsLM_early, level = 0.99, method = 'asymptotic')
   cat("Fit results for time < 100:\n")
-  print(coef(fit_nlsLM_early))
+  print(estimated_early_params)
   print(conf_intervals_early)
 } else {
   cat("Fitting was unsuccessful for the early time period.\n")
@@ -1047,7 +1081,7 @@ initial_params_late <- list(
   A_min = A_min_late,       
   eta_min = eta_min_late,   
   omega = omega_late,       
-  phi_j = 0                 # Initial guess for phi_j
+  phi_j = phi_102              # Initial guess for phi_j
 )
 
 # Fit the model for time >= 100
@@ -1075,7 +1109,7 @@ fit_nlsLM_late <- tryCatch({
   message("Fitting failed for the late time period")
   return(NULL)
 })
-
+estimated_late_params <-coef(fit_nlsLM_late)
 # Check if fitting was successful before calculating confidence intervals
 if (!is.null(fit_nlsLM_late)) {
   conf_intervals_late <- confint2(fit_nlsLM_late, level = 0.99, method = 'asymptotic')
@@ -1085,16 +1119,19 @@ if (!is.null(fit_nlsLM_late)) {
 } else {
   cat("Fitting was unsuccessful for the late time period.\n")
 }
+estimated_late_params
+names(estimated_late_params) <- c("A_max", "eta_max", "A_min", "eta_min", "omega", "phi")
+estimated_late_params
 ```
 
 The code below extracts the estimated parameters (\( A_{\text{max}} \), \( \eta_{\text{max}} \), \( A_{\text{min}} \), \( \eta_{\text{min}} \), \( \omega \), \( \phi_j \)) and their corresponding 99\% confidence intervals for both \textit{early} (time $<$ 100) and \textit{late} (time $\geq$ 100) periods. It combines these values into a single data frame (\texttt{combined\_data}) that lists each parameter with its estimate, lower bound (0.5\%), and upper bound (99.5\%) for both time periods. The purpose is to organize the parameter estimates and confidence intervals in a structured format, enabling easy comparison between the two time periods.
 
 ```{r}
-estimates_early <- coef(fit_nls_early)
+estimates_early <- estimated_early_params
 lower_early <- conf_intervals_early[, 1]
 upper_early <- conf_intervals_early[, 2]
 
-estimates_late <- coef(fit_nls_late)
+estimates_late <- estimated_late_params
 lower_late <- conf_intervals_late[, 1]
 upper_late <- conf_intervals_late[, 2]
 
@@ -1116,13 +1153,13 @@ I uses the estimated parameters for the \textit{time} $<$ 100 and \textit{time} 
 
 
 ```{r}
-df_MC_early$predicted <- asym_model_function(df_MC_early$Time, estimates_early["A_max"], estimates_early["eta_max"], 
-                                             estimates_early["A_min"], estimates_early["eta_min"], 
-                                             estimates_early["omega"], estimates_early["phi_j"])
+df_MC_early$predicted <- asym_model_function(df_MC_early$Time, estimated_early_params["A_max"], estimated_early_params["eta_max"], 
+                                             estimated_early_params["A_min"], estimated_early_params["eta_min"], 
+                                             estimated_early_params["omega"], estimated_early_params["phi"])
 
-df_MC_late$predicted <- asym_model_function(df_MC_late$Time, estimates_late["A_max"], estimates_late["eta_max"], 
-                                            estimates_late["A_min"], estimates_late["eta_min"], 
-                                            estimates_late["omega"], estimates_late["phi_j"])
+df_MC_late$predicted <- asym_model_function(df_MC_late$Time, 
+                    estimated_late_params["A_max"], estimated_late_params["eta_max"], estimated_late_params["A_min"], estimated_late_params["eta_min"], 
+              estimated_late_params["omega"], estimated_late_params["phi"])
 
 
 ggplot() +
@@ -1281,8 +1318,82 @@ hist(weights, main = "Histogram of Bayesian Adjusted Weights",
 
 ```
 
+## Estimate prior parameters
+## MLE
+\section*{1. Define the Probability Density Function of the Gamma Distribution}
+Assume $\sigma_i^{-2} \sim \text{Gamma}(\alpha, \beta)$, where $\alpha$ is the shape parameter and $\beta$ is the scale parameter. The probability density function of the Gamma distribution is given by:
+\[
+f(x; \alpha, \beta) = \frac{\beta^\alpha}{\Gamma(\alpha)} x^{\alpha - 1} e^{-\beta x}
+\]
+where $x = \sigma_i^{-2}$, and $x > 0$.
+
+\section*{2. Write the Likelihood Function}
+Assume we have $n$ observed values $x_1, x_2, \ldots, x_n$ (where $x_i = \sigma_i^{-2}$). The likelihood function $L(\alpha, \beta)$ for these observations is:
+\[
+L(\alpha, \beta) = \prod_{i=1}^n f(x_i; \alpha, \beta) = \prod_{i=1}^n \frac{\beta^\alpha}{\Gamma(\alpha)} x_i^{\alpha - 1} e^{-\beta x_i}
+\]
+
+\section*{3. Take the Log-Likelihood}
+For simplicity, we take the log of the likelihood function to obtain the log-likelihood $\ell(\alpha, \beta)$:
+\[
+\ell(\alpha, \beta) = \ln L(\alpha, \beta) = \sum_{i=1}^n \ln \left( \frac{\beta^\alpha}{\Gamma(\alpha)} x_i^{\alpha - 1} e^{-\beta x_i} \right)
+\]
+Expanding this expression:
+\[
+\ell(\alpha, \beta) = \sum_{i=1}^n (\alpha \ln \beta - \ln \Gamma(\alpha) + (\alpha - 1) \ln x_i - \beta x_i)
+\]
+Simplifying further, we get:
+\[
+\ell(\alpha, \beta) = n \alpha \ln \beta - n \ln \Gamma(\alpha) + (\alpha - 1) \sum_{i=1}^n \ln x_i - \beta \sum_{i=1}^n x_i
+\]
+
+\section*{4. Take the Derivative with Respect to $\alpha$ and $\beta$ and Set to Zero}
+To find the maximum likelihood estimate, we need to take the derivatives with respect to $\alpha$ and $\beta$ and set them equal to zero.
+
+\subsection*{Derivative with respect to $\beta$}
+\[
+\frac{\partial \ell}{\partial \beta} = \frac{n \alpha}{\beta} - \sum_{i=1}^n x_i
+\]
+Setting this to zero:
+\[
+\frac{n \alpha}{\beta} = \sum_{i=1}^n x_i
+\]
+Solving for $\beta$:
+\[
+\beta = \frac{n \alpha}{\sum_{i=1}^n x_i}
+\]
+
+\subsection*{Derivative with respect to $\alpha$}
+The derivative with respect to $\alpha$ requires using the derivative of $\ln \Gamma(\alpha)$, which is $\psi(\alpha) = \frac{d}{d\alpha} \ln \Gamma(\alpha)$, where $\psi(\alpha)$ is the Digamma function.
+\[
+\frac{\partial \ell}{\partial \alpha} = n \ln \beta - n \psi(\alpha) + \sum_{i=1}^n \ln x_i
+\]
 
 
+## Method of Moment
+Calculate Sample Moments：
+
+ Sample mean: \( \hat{\mu} = \frac{1}{n} \sum_{i=1}^{n} \hat{\sigma}_i^{-2} \)
+ 
+ 
+ Sample variance:\( \hat{s}^2 = \frac{1}{n-1} \sum_{i=1}^{n} \left( \hat{\sigma}_i^{-2} - \hat{\mu} \right)^2 \)
+
+
+According to the expectation and variance of the Gamma distribution, we have:
+\[
+\frac{d_{\text{prior}}}{\beta_{\text{prior}}} = \hat{\mu}
+\]
+\[
+\frac{d_{\text{prior}}}{\beta_{\text{prior}}^2} = \hat{s}^2
+\]
+
+By solving these two equations, we obtain:
+\[
+\beta_{\text{prior}} = \frac{\hat{\mu}}{\hat{s}^2}
+\]
+\[
+d_{\text{prior}} = \frac{\hat{\mu}^2}{\hat{s}^2}
+\]
 
 
 
